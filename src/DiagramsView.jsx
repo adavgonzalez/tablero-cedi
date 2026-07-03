@@ -110,7 +110,7 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
               style={{ ...styles.diagRow, ...(d.id === activeId ? styles.diagRowActive : {}) }}
               onClick={() => setActiveId(d.id)}
             >
-              <PenLine size={12} strokeWidth={2} color={d.id === activeId ? 'var(--led-green)' : 'var(--text-faint)'} />
+              <PenLine size={12} strokeWidth={2} color={d.id === activeId ? 'var(--accent)' : 'var(--text-faint)'} />
               {renamingId === d.id ? (
                 <input
                   autoFocus
@@ -169,24 +169,24 @@ const styles = {
   wrap: { display: 'flex', gap: 12, height: '72vh', minHeight: 480 },
   sidebar: { width: 200, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 },
   newBtn: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--led-green)',
-    border: 'none', borderRadius: 9, padding: '10px 12px', color: '#052013', fontSize: 13, fontWeight: 700,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent)',
+    border: 'none', borderRadius: 9, padding: '10px 12px', color: '#1a1200', fontSize: 13, fontWeight: 700,
   },
   diagList: { display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto' },
   diagRow: {
-    display: 'flex', alignItems: 'center', gap: 7, background: 'var(--steel-800)', border: '1px solid var(--steel-line)',
+    display: 'flex', alignItems: 'center', gap: 7, background: 'var(--panel)', border: '1px solid var(--edge)',
     borderRadius: 8, padding: '8px 10px', cursor: 'pointer', fontSize: 12.5,
   },
-  diagRowActive: { borderColor: 'var(--led-green)', background: 'var(--steel-700)' },
+  diagRowActive: { borderColor: 'var(--accent)', background: 'var(--panel-hi)' },
   diagName: { flex: 1, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   renameInput: {
-    flex: 1, fontSize: 12.5, background: 'var(--steel-600)', border: '1px solid var(--led-blue)',
+    flex: 1, fontSize: 12.5, background: 'var(--void-2)', border: '1px solid var(--accent)',
     borderRadius: 5, padding: '2px 5px', color: 'var(--text)', outline: 'none', minWidth: 0,
   },
   diagDelete: { background: 'transparent', border: 'none', color: 'var(--text-faint)', padding: 2, display: 'flex' },
   emptySidebar: { fontSize: 12, color: 'var(--text-faint)', padding: '10px 4px' },
   canvasPane: {
-    flex: 1, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--steel-line)',
+    flex: 1, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--edge)',
     background: '#121212',
   },
   canvasEmpty: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-faint)', fontSize: 13.5 },

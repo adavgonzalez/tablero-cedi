@@ -1,50 +1,51 @@
-@import url('https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700;800&display=swap');
 
 :root {
-  /* Panel steel */
-  --steel-950: #08090c;
-  --steel-900: #0d0f14;
-  --steel-800: #14171f;
-  --steel-700: #1b1f2a;
-  --steel-600: #262c3a;
-  --steel-line: #2e3544;
-  --rivet: #3a4252;
+  /* Board back — warm near-black, like the housing of a Solari board */
+  --void: #0a0a0d;
+  --void-2: #0e0e12;
+  --panel: #16151b;
+  --panel-hi: #1e1d25;
+  --panel-tile: #1a1920;
+  --seam: #050506;
+  --edge: #2a2833;
+  --edge-soft: #201f28;
 
-  /* Text */
-  --text: #eef1f6;
-  --text-dim: #8b93a7;
-  --text-faint: #565e70;
+  /* Lettering */
+  --text: #ece7db;
+  --text-dim: #8b8676;
+  --text-faint: #575345;
 
-  /* LEDs — the one bold move */
-  --led-green: #3ee08a;
-  --led-green-dim: #163d2a;
-  --led-green-glow: rgba(62, 224, 138, 0.65);
-  --led-amber: #ffb830;
-  --led-amber-dim: #40300f;
-  --led-amber-glow: rgba(255, 184, 48, 0.6);
-  --led-red: #ff5c5c;
-  --led-red-dim: #401616;
-  --led-red-glow: rgba(255, 92, 92, 0.6);
-  --led-blue: #4fb8ff;
-  --led-blue-glow: rgba(79, 184, 255, 0.55);
+  /* Accent — sodium/Solari amber (the board's identity) */
+  --accent: #ffb62e;
+  --accent-deep: #b87d12;
+  --accent-glow: rgba(255, 182, 46, 0.5);
 
-  --font-display: 'Big Shoulders Display', sans-serif;
-  --font-ui: 'Inter', system-ui, sans-serif;
+  /* Signal LEDs — real dispatch semantics */
+  --go: #35d07f;          /* enviado / departed */
+  --go-glow: rgba(53, 208, 127, 0.6);
+  --wait: #ffb62e;        /* pendiente / waiting */
+  --wait-glow: rgba(255, 182, 46, 0.55);
+  --late: #ff5757;        /* vencido / delayed */
+  --late-glow: rgba(255, 87, 87, 0.6);
+  --online: #35d07f;
+
+  --font-sign: 'Big Shoulders Display', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+  --font-ui: 'Inter', system-ui, sans-serif;
 
   --radius: 10px;
   --radius-lg: 14px;
 }
 
 * { box-sizing: border-box; }
-
 html, body, #root { height: 100%; margin: 0; }
 
 body {
   background:
-    radial-gradient(ellipse 900px 500px at 20% -10%, rgba(62, 224, 138, 0.06), transparent 60%),
-    radial-gradient(ellipse 700px 500px at 100% 10%, rgba(79, 184, 255, 0.05), transparent 55%),
-    var(--steel-950);
+    radial-gradient(ellipse 80% 55% at 50% -8%, rgba(255, 182, 46, 0.07), transparent 60%),
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.014) 0px, rgba(255,255,255,0.014) 1px, transparent 1px, transparent 3px),
+    var(--void);
   background-attachment: fixed;
   color: var(--text);
   font-family: var(--font-ui);
@@ -55,54 +56,91 @@ button { font-family: inherit; cursor: pointer; }
 input, textarea, select { font-family: inherit; }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: var(--steel-line); border-radius: 8px; }
+::-webkit-scrollbar-thumb { background: var(--edge); border-radius: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 
-@keyframes flapIn {
-  0% { opacity: 0; transform: rotateX(60deg) translateY(-6px); }
-  60% { opacity: 1; }
-  100% { opacity: 1; transform: rotateX(0deg) translateY(0); }
+/* ============================================================
+   SPLIT-FLAP — the signature element
+   ============================================================ */
+.flap-group { display: inline-flex; gap: 2px; }
+
+.flap {
+  --fh: 34px;
+  --fw: 24px;
+  --ffs: 26px;
+  position: relative;
+  display: inline-block;
+  width: var(--fw);
+  height: var(--fh);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--ffs);
+  line-height: var(--fh);
+  text-align: center;
+  color: var(--accent);
+  perspective: 240px;
+}
+.flap__half {
+  position: absolute; left: 0; width: 100%; height: 50%; overflow: hidden;
+  background: linear-gradient(180deg, var(--panel-hi), var(--panel-tile));
+  border: 1px solid var(--seam);
+}
+.flap__half span { position: absolute; left: 0; width: 100%; height: var(--fh); line-height: var(--fh); }
+.flap__half--top { top: 0; border-radius: 5px 5px 0 0; border-bottom: none; }
+.flap__half--top span { top: 0; }
+.flap__half--bottom { bottom: 0; border-radius: 0 0 5px 5px; border-top: none; }
+.flap__half--bottom span { bottom: 0; }
+/* center seam highlight */
+.flap::after {
+  content: ''; position: absolute; left: 0; right: 0; top: calc(50% - 1px); height: 2px;
+  background: var(--seam); z-index: 5; border-radius: 1px;
 }
 
-@keyframes ledPulse {
-  0%, 100% { box-shadow: 0 0 6px var(--glow-color, transparent), 0 0 0 rgba(0,0,0,0); }
-  50% { box-shadow: 0 0 14px var(--glow-color, transparent), 0 0 2px var(--glow-color, transparent); }
+.flap__leaf {
+  position: absolute; left: 0; width: 100%; height: 50%; overflow: hidden;
+  background: linear-gradient(180deg, var(--panel-hi), var(--panel-tile));
+  border: 1px solid var(--seam);
+  z-index: 4; backface-visibility: hidden;
 }
-
-@keyframes bannerSweep {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+.flap__leaf span { position: absolute; left: 0; width: 100%; height: var(--fh); line-height: var(--fh); }
+.flap__leaf--front {
+  top: 0; border-radius: 5px 5px 0 0; transform-origin: bottom center;
+  animation: flapTop 0.16s ease-in forwards;
 }
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.25; }
+.flap__leaf--front span { top: 0; }
+.flap__leaf--back {
+  bottom: 0; border-radius: 0 0 5px 5px; transform-origin: top center;
+  transform: rotateX(90deg); animation: flapBottom 0.16s 0.16s ease-out forwards;
 }
+.flap__leaf--back span { bottom: 0; }
 
-@keyframes popIn {
-  0% { opacity: 0; transform: scale(0.9) translateY(4px); }
-  100% { opacity: 1; transform: scale(1) translateY(0); }
-}
+@keyframes flapTop { from { transform: rotateX(0deg); } to { transform: rotateX(-90deg); } }
+@keyframes flapBottom { from { transform: rotateX(90deg); } to { transform: rotateX(0deg); } }
 
-.flap-in {
-  animation: flapIn 0.5s cubic-bezier(.2,.8,.2,1) both;
-  transform-origin: top center;
-}
+/* ============================================================
+   MOTION — orchestrated boot + micro-interactions
+   ============================================================ */
+@keyframes bootReveal { from { opacity: 0; transform: translateY(10px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes ledIgnite { 0% { opacity: 0; transform: scale(0.4); } 60% { opacity: 1; transform: scale(1.25); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes sodiumFlicker { 0%,18%,22%,100% { opacity: 1; } 19%,21% { opacity: 0.4; } 20% { opacity: 0.7; } }
+@keyframes ledPulse { 0%,100% { box-shadow: 0 0 6px var(--gc, transparent); } 50% { box-shadow: 0 0 14px var(--gc, transparent), 0 0 3px var(--gc, transparent); } }
+@keyframes tagFlip { 0% { transform: rotateX(0); } 45% { transform: rotateX(-90deg); } 55% { transform: rotateX(90deg); } 100% { transform: rotateX(0); } }
+@keyframes bannerRise { 0% { opacity: 0; transform: translateY(-8px) scale(0.97); } 100% { opacity: 1; transform: none; } }
+@keyframes sweep { 0% { background-position: -180% 0; } 100% { background-position: 180% 0; } }
+@keyframes rowIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
 
-.pop-in {
-  animation: popIn 0.25s ease both;
-}
+.boot-header { animation: bootReveal 0.6s cubic-bezier(.2,.8,.2,1) both; }
+.boot-tabs { animation: bootReveal 0.5s 0.12s cubic-bezier(.2,.8,.2,1) both; }
+.row-in { animation: rowIn 0.4s cubic-bezier(.2,.8,.2,1) both; }
+.led-ignite { animation: ledIgnite 0.5s ease both; }
+.led-live { animation: ledPulse 2.2s ease-in-out infinite; }
+.flicker { animation: sodiumFlicker 5s ease-in-out infinite; }
+.tag-flip { animation: tagFlip 0.4s ease both; }
+.banner-rise { animation: bannerRise 0.45s cubic-bezier(.2,.8,.2,1) both; }
 
-.led-live {
-  animation: ledPulse 2.2s ease-in-out infinite;
-}
-
-.blink-dot {
-  animation: blink 1.6s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .flap-in, .pop-in, .led-live, .blink-dot { animation: none !important; }
+.tab-underline {
+  position: absolute; bottom: -1px; height: 2px; background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow); transition: left .25s cubic-bezier(.4,0,.2,1), width .25s cubic-bezier(.4,0,.2,1);
 }
 
 @media (max-width: 720px) {
@@ -111,10 +149,14 @@ input, textarea, select { font-family: inherit; }
   .diagrams-wrap > div:first-child { width: 100% !important; }
   .diagrams-wrap > div:last-child { height: 60vh !important; }
 }
-
 @media (max-width: 560px) {
   .header-bezel { flex-direction: column; align-items: flex-start !important; }
   .header-right { width: 100%; justify-content: space-between; }
   .clock-block { border-right: none !important; padding-right: 0 !important; align-items: flex-start !important; }
-  .board-title { font-size: 30px !important; }
+  .board-title { font-size: 34px !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flap__leaf { display: none !important; }
+  .boot-header, .boot-tabs, .row-in, .led-ignite, .led-live, .flicker, .tag-flip, .banner-rise { animation: none !important; }
 }

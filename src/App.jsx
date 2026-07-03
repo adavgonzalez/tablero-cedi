@@ -4,6 +4,7 @@ import {
   Plus, Clock, CheckCircle2, Radio, ChevronRight, Circle, PenLine, Link2,
 } from 'lucide-react'
 import { supabase } from './supabase'
+import SplitFlap from './SplitFlap'
 
 const DiagramsView = lazy(() => import('./DiagramsView'))
 
@@ -70,11 +71,35 @@ export default function App() {
   const { start: weekStart, end: weekEnd } = weekRange()
 
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 30000)
+    const t = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(t)
   }, [])
 
   const load = useCallback(async () => {
+    if (typeof window !== 'undefined' && window.location.search.includes('demo')) {
+      const t = localDateStr()
+      const y = localDateStr(addDays(new Date(), -1))
+      const d2 = localDateStr(addDays(new Date(), -2))
+      setItems([
+        { id: 'd1', name: 'Inventario cíclico EWM', category: 'diario', position: 1, target_time: '08:00', status: 'backlog', diagram_id: 'g1' },
+        { id: 'd2', name: 'MB52 stock valorizado', category: 'diario', position: 2, target_time: '10:30', status: 'backlog' },
+        { id: 'd3', name: 'Avance de picking paqueteo', category: 'diario', position: 3, target_time: '14:00', status: 'backlog' },
+        { id: 'w1', name: 'Ocupación CEDI semanal', category: 'semanal', position: 1, target_weekday: 5, status: 'backlog' },
+        { id: 'w2', name: 'Indicadores modulación', category: 'semanal', position: 2, target_weekday: 2, status: 'backlog' },
+        { id: 't1', name: 'Refactor M_Plan_ERP', category: 'tarea', position: 1, status: 'en_progreso', diagram_id: 'g1' },
+        { id: 't2', name: 'Documentar flujo VT11→VL06F', category: 'tarea', position: 2, status: 'backlog' },
+        { id: 't3', name: 'Cierre remesas TCC', category: 'tarea', position: 3, status: 'hecho' },
+      ])
+      setCompletions([
+        { id: 'c1', item_id: 'd1', completed_date: t },
+        { id: 'c2', item_id: 'd1', completed_date: y },
+        { id: 'c3', item_id: 'd1', completed_date: d2 },
+        { id: 'c4', item_id: 'd2', completed_date: y },
+      ])
+      setDiagrams([{ id: 'g1', name: 'Pipeline SAP' }])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     const cutoff = localDateStr(addDays(new Date(), -HISTORY_DAYS))
     const [{ data: itemsData }, { data: compData }, { data: diagramsData }] = await Promise.all([
@@ -196,7 +221,7 @@ export default function App() {
     <div style={{ ...styles.app, maxWidth: tab === 'diagramas' ? 1400 : 920 }}>
       <Header now={now} dailyDone={dailyDone} dailyTotal={daily.length} streak={streak} />
 
-      <nav style={styles.tabs}>
+      <nav style={styles.tabs} className="boot-tabs">
         {TABS.map(t => (
           <button
             key={t.key}
@@ -291,29 +316,58 @@ export default function App() {
 function Header({ now, dailyDone, dailyTotal, streak }) {
   const hh = String(now.getHours()).padStart(2, '0')
   const mm = String(now.getMinutes()).padStart(2, '0')
-  const dayName = WEEKDAYS[now.getDay()]
-  const dateStr = now.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }).replace('.', '')
+  const ss = String(now.getSeconds()).padStart(2, '0')
+  const dayName = WEEKDAYS[now.getDay()].toUpperCase()
+  const dateStr = now.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }).replace('.', '').toUpperCase()
+  const clean = dailyTotal > 0 && dailyDone === dailyTotal
 
   return (
-    <header style={styles.header} className="flap-in">
+    <header style={styles.header} className="boot-header">
       <div style={styles.headerBezel} className="header-bezel">
+        {/* rivets */}
+        <span style={{ ...styles.rivet, top: 9, left: 9 }} />
+        <span style={{ ...styles.rivet, top: 9, right: 9 }} />
+        <span style={{ ...styles.rivet, bottom: 9, left: 9 }} />
+        <span style={{ ...styles.rivet, bottom: 9, right: 9 }} />
+
         <div style={styles.headerLeft}>
           <div style={styles.liveRow}>
-            <Radio size={11} className="blink-dot" color="var(--led-green)" strokeWidth={2.5} />
-            <span style={styles.liveText}>EN LÍNEA</span>
+            <span className="led-live flicker" style={{ ...styles.led, width: 9, height: 9, background: 'var(--online)', '--gc': 'var(--go-glow)' }} />
+            <span style={styles.liveText}>OPERANDO EN LÍNEA</span>
+            <span style={styles.destChip}>CEDI MADRID</span>
           </div>
-          <h1 style={styles.title} className="board-title">TABLERO&nbsp;CEDI</h1>
-          <p style={styles.subtitle}>Operaciones CEDI Madrid — Paqueteo</p>
+          <h1 style={styles.title} className="board-title">TABLERO&nbsp;DE&nbsp;DESPACHO</h1>
+          <p style={styles.subtitle}>Operaciones · Paqueteo · {dayName} {dateStr}</p>
         </div>
 
         <div style={styles.headerRight} className="header-right">
           <div style={styles.clockBlock} className="clock-block">
-            <span style={styles.clockDigits}>{hh}:{mm}</span>
-            <span style={styles.clockMeta}>{dayName} {dateStr} · {turnoLabel(now.getHours())}</span>
+            <div style={styles.clockRow}>
+              <SplitFlap text={hh} size={{ h: 40, w: 27, fs: 30, color: 'var(--accent)' }} />
+              <span style={styles.colon}>:</span>
+              <SplitFlap text={mm} size={{ h: 40, w: 27, fs: 30, color: 'var(--accent)' }} />
+              <span style={styles.secBox}>
+                <SplitFlap text={ss} size={{ h: 18, w: 12, fs: 12, color: 'var(--text-dim)' }} />
+              </span>
+            </div>
+            <span style={styles.clockMeta}>{turnoLabel(now.getHours()).toUpperCase()}</span>
           </div>
-          <div style={styles.metricsRow}>
-            <Metric label="Hoy" value={`${dailyDone}/${dailyTotal}`} color="var(--led-green)" />
-            <Metric label="Racha" value={streak} icon={streak > 0 ? Flame : null} color="var(--led-amber)" />
+
+          <div style={styles.boardStats}>
+            <div style={styles.statCol}>
+              <span style={styles.statLabel}>Enviados hoy</span>
+              <span style={{ ...styles.statBig, color: clean ? 'var(--go)' : 'var(--text)' }}>
+                {dailyDone}<span style={styles.statSlash}>/{dailyTotal}</span>
+              </span>
+            </div>
+            <div style={styles.statDivider} />
+            <div style={styles.statCol}>
+              <span style={styles.statLabel}>Racha</span>
+              <span style={styles.streakRow}>
+                <SplitFlap text={String(streak).padStart(2, '0')} size={{ h: 24, w: 16, fs: 17, color: streak > 0 ? 'var(--accent)' : 'var(--text-faint)' }} />
+                <Flame size={13} color={streak > 0 ? 'var(--accent)' : 'var(--text-faint)'} strokeWidth={2.5} />
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -321,34 +375,50 @@ function Header({ now, dailyDone, dailyTotal, streak }) {
   )
 }
 
-function Metric({ label, value, color, icon: Icon }) {
-  return (
-    <div style={{ ...styles.metric, borderColor: color }}>
-      {Icon && <Icon size={13} color={color} strokeWidth={2.5} />}
-      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 15, color }}>{value}</span>
-      <span style={{ fontSize: 10, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.6 }}>{label}</span>
-    </div>
-  )
-}
-
 function CleanBoardBanner() {
   return (
-    <div style={styles.banner} className="pop-in">
-      <CheckCircle2 size={17} color="var(--led-green)" strokeWidth={2.5} />
-      <span style={{ fontWeight: 700 }}>Tablero limpio</span>
-      <span style={{ color: 'var(--text-dim)' }}>— todos los informes de hoy están enviados.</span>
+    <div style={styles.banner} className="banner-rise">
+      <span className="led-live" style={{ ...styles.led, width: 9, height: 9, background: 'var(--go)', '--gc': 'var(--go-glow)' }} />
+      <span style={{ fontWeight: 800, fontFamily: 'var(--font-sign)', fontSize: 17, letterSpacing: 0.5, color: 'var(--go)' }}>TABLERO LIMPIO</span>
+      <span style={{ color: 'var(--text-dim)', fontSize: 13 }}>Todos los informes de hoy están enviados.</span>
     </div>
   )
 }
 
 function Led({ state, live }) {
-  const color = state === 'done' ? 'var(--led-green)' : state === 'late' ? 'var(--led-red)' : 'var(--led-amber)'
-  const glow = state === 'done' ? 'var(--led-green-glow)' : state === 'late' ? 'var(--led-red-glow)' : 'var(--led-amber-glow)'
+  const map = {
+    done: ['var(--go)', 'var(--go-glow)'],
+    late: ['var(--late)', 'var(--late-glow)'],
+    pending: ['var(--wait)', 'var(--wait-glow)'],
+  }
+  const [color, glow] = map[state] || map.pending
   return (
     <span
-      className={live ? 'led-live' : ''}
-      style={{ ...styles.led, background: color, boxShadow: `0 0 8px ${glow}`, '--glow-color': glow }}
+      className={`led-ignite ${live ? 'led-live' : ''}`}
+      style={{ ...styles.led, background: color, boxShadow: `0 0 8px ${glow}`, '--gc': glow }}
     />
+  )
+}
+
+function StatusTag({ label, tone }) {
+  const color = tone === 'done' ? 'var(--go)' : tone === 'late' ? 'var(--late)' : 'var(--text-dim)'
+  const border = tone === 'done' ? 'var(--go)' : tone === 'late' ? 'var(--late)' : 'var(--edge)'
+  const [display, setDisplay] = useState(label)
+  const [anim, setAnim] = useState(false)
+  const first = useRef(true)
+  useEffect(() => {
+    if (first.current) { first.current = false; setDisplay(label); return }
+    if (label === display) return
+    setAnim(true)
+    const t1 = setTimeout(() => setDisplay(label), 180)
+    const t2 = setTimeout(() => setAnim(false), 400)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [label])
+  return (
+    <span className={anim ? 'tag-flip' : ''} style={{ ...styles.statusTag, color, borderColor: border }}>
+      {display}
+    </span>
   )
 }
 
@@ -434,7 +504,7 @@ function DailyView({ items, completions, today, now, onToggle, onRemove, ...extr
   const sorted = [...items].sort((a, b) => (a.target_time || '99:99').localeCompare(b.target_time || '99:99'))
   return (
     <div style={styles.list}>
-      {sorted.map(item => {
+      {sorted.map((item, idx) => {
         const done = completions.some(c => c.item_id === item.id && c.completed_date === today)
         let state = 'pending'
         if (done) state = 'done'
@@ -443,16 +513,16 @@ function DailyView({ items, completions, today, now, onToggle, onRemove, ...extr
           if (nowMin > h * 60 + m) state = 'late'
         }
         return (
-          <div key={item.id} style={styles.row} onClick={() => onToggle(item.id, today)}>
+          <div key={item.id} style={{ ...styles.row, animationDelay: `${idx * 45}ms` }} className="row-in" onClick={() => onToggle(item.id, today)}>
             <Led state={state} live={state !== 'done'} />
             <div style={styles.rowMain}>
               <ItemLabel item={item} done={done} {...extraProps} />
               <HistoryDots itemId={item.id} completions={completions} />
             </div>
-            <span style={{ ...styles.rowMeta, color: state === 'late' ? 'var(--led-red)' : 'var(--text-faint)' }}>
+            <span style={{ ...styles.rowMeta, color: state === 'late' ? 'var(--late)' : 'var(--text-faint)' }}>
               {item.target_time && <><Clock size={11} strokeWidth={2.5} style={{ verticalAlign: -2, marginRight: 3 }} />{item.target_time.slice(0, 5)}</>}
-              {' '}{done ? 'Enviado' : state === 'late' ? 'Vencido' : 'Pendiente'}
             </span>
+            <StatusTag label={done ? 'ENVIADO' : state === 'late' ? 'VENCIDO' : 'PENDIENTE'} tone={done ? 'done' : state === 'late' ? 'late' : 'pending'} />
             <DiagramLink item={item} {...extraProps} />
             <button style={styles.deleteBtn} onClick={e => { e.stopPropagation(); onRemove(item.id) }}><Trash2 size={13} strokeWidth={2} /></button>
           </div>
@@ -467,22 +537,22 @@ function WeeklyView({ items, completions, weekStart, weekEnd, onToggle, onRemove
   if (items.length === 0) return <EmptyState text="Sin informes semanales. Agrega el primero abajo." />
   return (
     <div style={styles.list}>
-      {items.map(item => {
+      {items.map((item, idx) => {
         const done = completions.some(c => c.item_id === item.id && c.completed_date >= weekStart && c.completed_date <= weekEnd)
         const isLate = !done && item.target_weekday !== null && (
           item.target_weekday === 0 ? todayDow !== 0 : todayDow > item.target_weekday || todayDow === 0
         )
         const state = done ? 'done' : isLate ? 'late' : 'pending'
         return (
-          <div key={item.id} style={styles.row} onClick={() => onToggle(item.id, localDateStr())}>
+          <div key={item.id} style={{ ...styles.row, animationDelay: `${idx * 45}ms` }} className="row-in" onClick={() => onToggle(item.id, localDateStr())}>
             <Led state={state} live={state !== 'done'} />
             <div style={styles.rowMain}>
               <ItemLabel item={item} done={done} {...extraProps} />
             </div>
-            <span style={{ ...styles.rowMeta, color: state === 'late' ? 'var(--led-red)' : 'var(--text-faint)' }}>
-              {item.target_weekday !== null ? `Meta ${WEEKDAYS_SHORT[item.target_weekday]}` : 'Cualquier día'}
-              {' · '}{done ? 'Completado' : isLate ? 'Vencido' : 'Pendiente'}
+            <span style={{ ...styles.rowMeta, color: state === 'late' ? 'var(--late)' : 'var(--text-faint)' }}>
+              {item.target_weekday !== null ? `META ${WEEKDAYS_SHORT[item.target_weekday].toUpperCase()}` : 'CUALQUIER DÍA'}
             </span>
+            <StatusTag label={done ? 'COMPLETADO' : isLate ? 'VENCIDO' : 'PENDIENTE'} tone={done ? 'done' : isLate ? 'late' : 'pending'} />
             <DiagramLink item={item} {...extraProps} />
             <button style={styles.deleteBtn} onClick={e => { e.stopPropagation(); onRemove(item.id) }}><Trash2 size={13} strokeWidth={2} /></button>
           </div>
@@ -545,66 +615,92 @@ function EmptyState({ text }) {
 const styles = {
   app: { maxWidth: 920, margin: '0 auto', padding: '24px 20px 80px', minHeight: '100%' },
 
-  header: { marginBottom: 22 },
+  header: { marginBottom: 20 },
   headerBezel: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 18,
-    background: 'linear-gradient(180deg, var(--steel-800), var(--steel-900))',
-    border: '1px solid var(--steel-line)', borderRadius: 'var(--radius-lg)',
-    padding: '20px 24px', position: 'relative', overflow: 'hidden',
-    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 24px rgba(0,0,0,0.35)',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 20,
+    background: 'linear-gradient(180deg, var(--panel-hi), var(--panel))',
+    border: '1px solid var(--edge)', borderRadius: 'var(--radius-lg)',
+    padding: '22px 26px', position: 'relative', overflow: 'hidden',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), inset 0 0 60px rgba(0,0,0,0.4), 0 10px 30px rgba(0,0,0,0.45)',
   },
-  headerLeft: {},
-  liveRow: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 },
-  liveText: { fontFamily: 'var(--font-mono)', fontSize: 10.5, letterSpacing: 1.5, color: 'var(--led-green)', fontWeight: 700 },
+  rivet: {
+    position: 'absolute', width: 5, height: 5, borderRadius: '50%',
+    background: 'radial-gradient(circle at 35% 35%, #4a4754, #16151b)', boxShadow: 'inset 0 0 1px rgba(255,255,255,0.3)',
+  },
+  headerLeft: { position: 'relative', zIndex: 1 },
+  liveRow: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 },
+  led: { width: 11, height: 11, borderRadius: '50%', flexShrink: 0, display: 'inline-block' },
+  liveText: { fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: 1.6, color: 'var(--online)', fontWeight: 700 },
+  destChip: {
+    fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: 1.4, color: 'var(--accent)',
+    border: '1px solid var(--accent-deep)', borderRadius: 4, padding: '2px 7px', fontWeight: 700,
+  },
   title: {
-    fontFamily: 'var(--font-display)', fontSize: 40, fontWeight: 800, margin: 0,
-    letterSpacing: 1, lineHeight: 0.95, color: 'var(--text)',
-    textShadow: '0 0 24px rgba(62, 224, 138, 0.15)',
+    fontFamily: 'var(--font-sign)', fontSize: 42, fontWeight: 800, margin: 0,
+    letterSpacing: 1.5, lineHeight: 0.92, color: 'var(--text)',
+    textShadow: '0 2px 0 rgba(0,0,0,0.5), 0 0 30px rgba(255,182,46,0.12)',
   },
-  subtitle: { color: 'var(--text-dim)', margin: '6px 0 0', fontSize: 13, fontFamily: 'var(--font-mono)' },
-  headerRight: { display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' },
-  clockBlock: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', paddingRight: 18, borderRight: '1px solid var(--steel-line)' },
-  clockDigits: { fontFamily: 'var(--font-mono)', fontSize: 26, fontWeight: 700, color: 'var(--led-blue)', letterSpacing: 1, textShadow: '0 0 16px var(--led-blue-glow)' },
-  clockMeta: { fontSize: 11, color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: 0.5 },
-  metricsRow: { display: 'flex', gap: 10 },
-  metric: { display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 9, border: '1px solid', background: 'var(--steel-700)' },
+  subtitle: { color: 'var(--text-dim)', margin: '7px 0 0', fontSize: 11.5, fontFamily: 'var(--font-mono)', letterSpacing: 1, fontWeight: 500 },
 
-  tabs: { display: 'flex', gap: 8, marginBottom: 18 },
+  headerRight: { display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap', position: 'relative', zIndex: 1 },
+  clockBlock: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, paddingRight: 22, borderRight: '1px solid var(--edge)' },
+  clockRow: { display: 'flex', alignItems: 'center', gap: 2 },
+  colon: { fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: 'var(--accent)', margin: '0 1px', animation: 'ledPulse 1s steps(1) infinite' },
+  secBox: { marginLeft: 6, alignSelf: 'flex-end', marginBottom: 4, opacity: 0.85 },
+  clockMeta: { fontSize: 10, color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', letterSpacing: 1.5, fontWeight: 600 },
+
+  boardStats: { display: 'flex', alignItems: 'center', gap: 16 },
+  statCol: { display: 'flex', flexDirection: 'column', gap: 5 },
+  statLabel: { fontSize: 9.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'var(--font-mono)', fontWeight: 600 },
+  statBig: { fontFamily: 'var(--font-sign)', fontSize: 30, fontWeight: 800, lineHeight: 1 },
+  statSlash: { fontSize: 16, color: 'var(--text-faint)', fontWeight: 600 },
+  statDivider: { width: 1, height: 34, background: 'var(--edge)' },
+  streakRow: { display: 'flex', alignItems: 'center', gap: 6 },
+
+  tabs: { display: 'flex', gap: 8, marginBottom: 20, position: 'relative' },
   tabBtn: {
-    display: 'flex', alignItems: 'center', background: 'var(--steel-800)', border: '1px solid var(--steel-line)',
-    color: 'var(--text-dim)', padding: '10px 16px', borderRadius: 9, fontSize: 13.5, fontWeight: 600,
-    transition: 'all .15s',
+    display: 'flex', alignItems: 'center', background: 'var(--panel)', border: '1px solid var(--edge-soft)',
+    color: 'var(--text-dim)', padding: '10px 16px', borderRadius: 9, fontSize: 13, fontWeight: 600,
+    letterSpacing: 0.3, transition: 'all .18s',
   },
-  tabBtnActive: { background: 'var(--steel-700)', borderColor: 'var(--led-green)', color: 'var(--text)', boxShadow: '0 0 0 1px rgba(62,224,138,0.15)' },
-  tabCount: { marginLeft: 8, fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--steel-600)', color: 'var(--text-dim)', borderRadius: 5, padding: '1px 6px' },
-  tabCountDone: { background: 'var(--led-green-dim)', color: 'var(--led-green)' },
+  tabBtnActive: {
+    background: 'linear-gradient(180deg, var(--panel-hi), var(--panel))', borderColor: 'var(--accent-deep)',
+    color: 'var(--accent)', boxShadow: '0 0 0 1px rgba(255,182,46,0.15), 0 0 18px rgba(255,182,46,0.1)',
+  },
+  tabCount: { marginLeft: 8, fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--void-2)', color: 'var(--text-dim)', borderRadius: 5, padding: '1px 6px', fontWeight: 700 },
+  tabCountDone: { background: 'rgba(53,208,127,0.15)', color: 'var(--go)' },
 
-  main: {},
-  loading: { color: 'var(--text-dim)', padding: 40, textAlign: 'center', fontFamily: 'var(--font-mono)' },
+  main: { position: 'relative' },
+  loading: { color: 'var(--text-dim)', padding: 40, textAlign: 'center', fontFamily: 'var(--font-mono)', letterSpacing: 1 },
 
   banner: {
-    display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14, padding: '11px 16px',
-    background: 'linear-gradient(90deg, var(--led-green-dim), var(--steel-800))',
-    border: '1px solid rgba(62,224,138,0.35)', borderRadius: 9, fontSize: 13.5,
+    display: 'flex', alignItems: 'center', gap: 11, marginBottom: 14, padding: '13px 18px',
+    background: 'linear-gradient(90deg, rgba(53,208,127,0.12), transparent)',
+    border: '1px solid rgba(53,208,127,0.3)', borderRadius: 10,
   },
 
   list: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 },
   row: {
-    display: 'flex', alignItems: 'center', gap: 13, background: 'var(--steel-800)',
-    border: '1px solid var(--steel-line)', borderRadius: 10, padding: '13px 16px', cursor: 'pointer',
-    transition: 'border-color .15s, transform .1s',
+    display: 'flex', alignItems: 'center', gap: 13, background: 'linear-gradient(180deg, var(--panel), var(--void-2))',
+    border: '1px solid var(--edge-soft)', borderRadius: 10, padding: '13px 16px', cursor: 'pointer',
+    transition: 'border-color .16s, transform .12s, box-shadow .16s',
   },
-  rowMain: { flex: 1, display: 'flex', flexDirection: 'column', gap: 5 },
+  rowMain: { flex: 1, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 },
   rowLabel: { fontSize: 14.5, fontWeight: 500 },
   rowLabelDone: { color: 'var(--text-dim)', textDecoration: 'line-through' },
-  rowMeta: { fontSize: 11.5, color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' },
-  led: { width: 11, height: 11, borderRadius: '50%', flexShrink: 0 },
+  rowMeta: { fontSize: 10.5, color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', letterSpacing: 0.5, fontWeight: 600 },
+
+  statusTag: {
+    fontFamily: 'var(--font-mono)', fontSize: 9.5, fontWeight: 700, letterSpacing: 1, padding: '3px 8px',
+    border: '1px solid', borderRadius: 5, whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'center', minWidth: 82,
+    transformStyle: 'preserve-3d',
+  },
 
   historyRow: { display: 'flex', gap: 4 },
   historyDot: { width: 6, height: 6, borderRadius: '50%' },
 
   renameInput: {
-    fontSize: 14.5, fontWeight: 500, background: 'var(--steel-600)', border: '1px solid var(--led-blue)',
+    fontSize: 14.5, fontWeight: 500, background: 'var(--void-2)', border: '1px solid var(--accent)',
     borderRadius: 5, padding: '2px 6px', color: 'var(--text)', outline: 'none', width: '90%',
   },
 
@@ -613,13 +709,13 @@ const styles = {
 
   diagLinkWrap: { display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, position: 'relative' },
   diagLinkBtn: {
-    display: 'flex', alignItems: 'center', gap: 4, background: 'var(--led-blue-glow-bg, rgba(79,184,255,0.1))',
-    border: '1px solid rgba(79,184,255,0.35)', borderRadius: 6, padding: '3px 7px', color: 'var(--led-blue)',
+    display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,182,46,0.08)',
+    border: '1px solid var(--accent-deep)', borderRadius: 6, padding: '3px 7px', color: 'var(--accent)',
     fontSize: 11, maxWidth: 120,
   },
   diagLinkName: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   diagSelect: {
-    background: 'transparent', border: '1px solid var(--steel-line)', borderRadius: 6, color: 'var(--text-faint)',
+    background: 'transparent', border: '1px solid var(--edge)', borderRadius: 6, color: 'var(--text-faint)',
     fontSize: 11, padding: '3px 4px', maxWidth: 26, appearance: 'none', textAlign: 'center', cursor: 'pointer',
   },
   diagSelectLinked: { maxWidth: 20, opacity: 0.7 },
@@ -627,17 +723,17 @@ const styles = {
   empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'var(--text-faint)', padding: '44px 0', textAlign: 'center', fontSize: 13.5, marginBottom: 20 },
 
   addForm: { display: 'flex', gap: 8, position: 'sticky', bottom: 16, flexWrap: 'wrap' },
-  input: { flex: 1, minWidth: 160, background: 'var(--steel-700)', border: '1px solid var(--steel-line)', borderRadius: 9, padding: '11px 14px', color: 'var(--text)', fontSize: 14, outline: 'none' },
-  select: { background: 'var(--steel-700)', border: '1px solid var(--steel-line)', borderRadius: 9, padding: '11px 10px', color: 'var(--text)', fontSize: 13.5 },
-  addBtn: { display: 'flex', alignItems: 'center', background: 'var(--led-green)', border: 'none', borderRadius: 9, padding: '11px 18px', color: '#052013', fontSize: 14, fontWeight: 700 },
+  input: { flex: 1, minWidth: 160, background: 'var(--panel-hi)', border: '1px solid var(--edge)', borderRadius: 9, padding: '11px 14px', color: 'var(--text)', fontSize: 14, outline: 'none' },
+  select: { background: 'var(--panel-hi)', border: '1px solid var(--edge)', borderRadius: 9, padding: '11px 10px', color: 'var(--text)', fontSize: 13.5 },
+  addBtn: { display: 'flex', alignItems: 'center', background: 'var(--accent)', border: 'none', borderRadius: 9, padding: '11px 18px', color: '#1a1200', fontSize: 14, fontWeight: 800, boxShadow: '0 0 18px rgba(255,182,46,0.25)' },
 
   kanban: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 },
-  kanbanCol: { background: 'var(--steel-800)', border: '1px solid var(--steel-line)', borderRadius: 12, padding: 12, minHeight: 200 },
-  kanbanColHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--text-dim)', marginBottom: 12 },
-  kanbanCount: { background: 'var(--steel-600)', borderRadius: 6, padding: '1px 7px', fontFamily: 'var(--font-mono)' },
+  kanbanCol: { background: 'linear-gradient(180deg, var(--panel), var(--void-2))', border: '1px solid var(--edge-soft)', borderRadius: 12, padding: 12, minHeight: 200 },
+  kanbanColHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-dim)', marginBottom: 12, fontFamily: 'var(--font-mono)' },
+  kanbanCount: { background: 'var(--void-2)', borderRadius: 6, padding: '1px 7px', fontFamily: 'var(--font-mono)' },
   kanbanColBody: { display: 'flex', flexDirection: 'column', gap: 8 },
-  kanbanEmpty: { fontSize: 11.5, color: 'var(--text-faint)', textAlign: 'center', padding: '16px 0' },
-  kanbanCard: { background: 'var(--steel-700)', border: '1px solid var(--steel-line)', borderRadius: 9, padding: 11 },
+  kanbanEmpty: { fontSize: 11, color: 'var(--text-faint)', textAlign: 'center', padding: '16px 0', fontFamily: 'var(--font-mono)', letterSpacing: 1 },
+  kanbanCard: { background: 'var(--panel-hi)', border: '1px solid var(--edge)', borderRadius: 9, padding: 11 },
   kanbanCardActions: { display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginTop: 9 },
-  kanbanMoveBtn: { display: 'flex', alignItems: 'center', gap: 2, background: 'transparent', border: '1px solid var(--steel-line)', color: 'var(--text-dim)', fontSize: 10.5, padding: '3px 7px', borderRadius: 6 },
+  kanbanMoveBtn: { display: 'flex', alignItems: 'center', gap: 2, background: 'transparent', border: '1px solid var(--edge)', color: 'var(--text-dim)', fontSize: 10.5, padding: '3px 7px', borderRadius: 6 },
 }
