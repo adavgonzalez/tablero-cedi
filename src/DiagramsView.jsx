@@ -6,7 +6,7 @@ import { supabase } from './supabase'
 
 const SAVE_DEBOUNCE_MS = 1200
 
-export default function DiagramsView() {
+export default function DiagramsView({ focusId, onFocusConsumed }) {
   const [diagrams, setDiagrams] = useState([])
   const [activeId, setActiveId] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -33,7 +33,14 @@ export default function DiagramsView() {
 
   useEffect(() => { load() }, [load])
 
-  const active = diagrams.find(d => d.id === activeId)
+  useEffect(() => {
+    if (focusId) {
+      setActiveId(focusId)
+      onFocusConsumed?.()
+    }
+  }, [focusId, onFocusConsumed])
+
+  const active = diagrams.find(d => d.id === activeId) || (activeId ? { id: activeId, name: '' } : null)
 
   async function createDiagram() {
     const maxPos = diagrams.reduce((m, d) => Math.max(m, d.position || 0), 0)

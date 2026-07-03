@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react'
 import {
   Sun, CalendarDays, LayoutGrid, Flame, Trash2, Pencil,
-  Plus, Clock, CheckCircle2, Radio, ChevronRight, Circle, PenLine,
+  Plus, Clock, CheckCircle2, Radio, ChevronRight, Circle, PenLine, Link2,
 } from 'lucide-react'
 import { supabase } from './supabase'
 
@@ -63,6 +63,8 @@ export default function App() {
   const [now, setNow] = useState(new Date())
   const [renamingId, setRenamingId] = useState(null)
   const [renameValue, setRenameValue] = useState('')
+  const [diagrams, setDiagrams] = useState([])
+  const [diagramFocusId, setDiagramFocusId] = useState(null)
 
   const today = localDateStr()
   const { start: weekStart, end: weekEnd } = weekRange()
@@ -75,12 +77,14 @@ export default function App() {
   const load = useCallback(async () => {
     setLoading(true)
     const cutoff = localDateStr(addDays(new Date(), -HISTORY_DAYS))
-    const [{ data: itemsData }, { data: compData }] = await Promise.all([
+    const [{ data: itemsData }, { data: compData }, { data: diagramsData }] = await Promise.all([
       supabase.from('informes_items').select('*').eq('archived', false).order('position', { ascending: true }),
       supabase.from('informes_completions').select('*').gte('completed_date', cutoff),
+      supabase.from('diagrams').select('id, name').eq('archived', false).order('position', { ascending: true }),
     ])
     setItems(itemsData || [])
     setCompletions(compData || [])
+    setDiagrams(diagramsData || [])
     setLoading(false)
   }, [])
 
@@ -90,6 +94,7 @@ export default function App() {
       .channel('informes-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'informes_items' }, load)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'informes_completions' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'diagrams' }, load)
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [load])
@@ -138,6 +143,30 @@ export default function App() {
   async function moveTask(id, status) {
     await supabase.from('informes_items').update({ status }).eq('id', id)
     load()
+  }
+
+  async function linkDiagram(itemId, diagramId) {
+    await supabase.from('informes_items').update({ diagram_id: diagramId }).eq('id', itemId)
+    load()
+  }
+
+  async function createDiagramForItem(item) {
+    const maxPos = diagrams.reduce((m, d) => Math.max(m, d.position || 0), 0)
+    const { data, error } = await supabase
+      .from('diagrams')
+      .insert({ name: item.name, scene: {}, position: maxPos + 1 })
+      .select('id, name')
+      .single()
+    if (error || !data) return
+    await supabase.from('informes_items').update({ diagram_id: data.id }).eq('id', item.id)
+    setDiagramFocusId(data.id)
+    setTab('diagramas')
+    load()
+  }
+
+  function jumpToDiagram(diagramId) {
+    setDiagramFocusId(diagramId)
+    setTab('diagramas')
   }
 
   const daily = items.filter(i => i.category === 'diario')
@@ -204,6 +233,7 @@ export default function App() {
               onRemove={removeItem}
               renamingId={renamingId} renameValue={renameValue}
               setRenamingId={setRenamingId} setRenameValue={setRenameValue} onRename={renameItem}
+              diagrams={diagrams} onLinkDiagram={linkDiagram} onCreateDiagram={createDiagramForItem} onJumpDiagram={jumpToDiagram}
             />
           </>
         ) : tab === 'semanal' ? (
@@ -212,15 +242,17 @@ export default function App() {
             onToggle={toggleCompletion} onRemove={removeItem}
             renamingId={renamingId} renameValue={renameValue}
             setRenamingId={setRenamingId} setRenameValue={setRenameValue} onRename={renameItem}
+            diagrams={diagrams} onLinkDiagram={linkDiagram} onCreateDiagram={createDiagramForItem} onJumpDiagram={jumpToDiagram}
           />
         ) : tab === 'tarea' ? (
           <KanbanView items={tasks} onMove={moveTask} onRemove={removeItem}
             renamingId={renamingId} renameValue={renameValue}
             setRenamingId={setRenamingId} setRenameValue={setRenameValue} onRename={renameItem}
+            diagrams={diagrams} onLinkDiagram={linkDiagram} onCreateDiagram={createDiagramForItem} onJumpDiagram={jumpToDiagram}
           />
         ) : (
           <Suspense fallback={<div style={styles.loading}>Cargando lienzo…</div>}>
-            <DiagramsView />
+            <DiagramsView focusId={diagramFocusId} onFocusConsumed={() => setDiagramFocusId(null)} />
           </Suspense>
         )}
 
@@ -336,6 +368,38 @@ function HistoryDots({ itemId, completions, days = 7 }) {
   )
 }
 
+function DiagramLink({ item, diagrams, onLinkDiagram, onCreateDiagram, onJumpDiagram }) {
+  const linked = diagrams.find(d => d.id === item.diagram_id)
+  return (
+    <div style={styles.diagLinkWrap} onClick={e => e.stopPropagation()}>
+      {linked && (
+        <button style={styles.diagLinkBtn} onClick={() => onJumpDiagram(linked.id)} title={`Abrir diagrama: ${linked.name}`}>
+          <PenLine size={11} strokeWidth={2.25} />
+          <span style={styles.diagLinkName}>{linked.name}</span>
+        </button>
+      )}
+      {!linked && <Link2 size={12} strokeWidth={2} color="var(--text-faint)" />}
+      <select
+        style={{ ...styles.diagSelect, ...(linked ? styles.diagSelectLinked : {}) }}
+        value=""
+        title={linked ? 'Cambiar diagrama vinculado' : 'Vincular un diagrama'}
+        onChange={e => {
+          const v = e.target.value
+          if (v === '__new__') onCreateDiagram(item)
+          else if (v === '__unlink__') onLinkDiagram(item.id, null)
+          else if (v) onLinkDiagram(item.id, v)
+          e.target.value = ''
+        }}
+      >
+        <option value="">{linked ? '⋯' : 'Vincular'}</option>
+        {diagrams.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+        <option value="__new__">+ Crear nuevo…</option>
+        {linked && <option value="__unlink__">Quitar vínculo</option>}
+      </select>
+    </div>
+  )
+}
+
 function ItemLabel({ item, done, renamingId, renameValue, setRenamingId, setRenameValue, onRename }) {
   const inputRef = useRef(null)
   useEffect(() => { if (renamingId === item.id) inputRef.current?.focus() }, [renamingId, item.id])
@@ -364,7 +428,7 @@ function ItemLabel({ item, done, renamingId, renameValue, setRenamingId, setRena
   )
 }
 
-function DailyView({ items, completions, today, now, onToggle, onRemove, ...renameProps }) {
+function DailyView({ items, completions, today, now, onToggle, onRemove, ...extraProps }) {
   if (items.length === 0) return <EmptyState text="Sin informes diarios. Agrega el primero abajo." />
   const nowMin = now.getHours() * 60 + now.getMinutes()
   const sorted = [...items].sort((a, b) => (a.target_time || '99:99').localeCompare(b.target_time || '99:99'))
@@ -382,13 +446,14 @@ function DailyView({ items, completions, today, now, onToggle, onRemove, ...rena
           <div key={item.id} style={styles.row} onClick={() => onToggle(item.id, today)}>
             <Led state={state} live={state !== 'done'} />
             <div style={styles.rowMain}>
-              <ItemLabel item={item} done={done} {...renameProps} />
+              <ItemLabel item={item} done={done} {...extraProps} />
               <HistoryDots itemId={item.id} completions={completions} />
             </div>
             <span style={{ ...styles.rowMeta, color: state === 'late' ? 'var(--led-red)' : 'var(--text-faint)' }}>
               {item.target_time && <><Clock size={11} strokeWidth={2.5} style={{ verticalAlign: -2, marginRight: 3 }} />{item.target_time.slice(0, 5)}</>}
               {' '}{done ? 'Enviado' : state === 'late' ? 'Vencido' : 'Pendiente'}
             </span>
+            <DiagramLink item={item} {...extraProps} />
             <button style={styles.deleteBtn} onClick={e => { e.stopPropagation(); onRemove(item.id) }}><Trash2 size={13} strokeWidth={2} /></button>
           </div>
         )
@@ -397,7 +462,7 @@ function DailyView({ items, completions, today, now, onToggle, onRemove, ...rena
   )
 }
 
-function WeeklyView({ items, completions, weekStart, weekEnd, onToggle, onRemove, ...renameProps }) {
+function WeeklyView({ items, completions, weekStart, weekEnd, onToggle, onRemove, ...extraProps }) {
   const todayDow = new Date().getDay()
   if (items.length === 0) return <EmptyState text="Sin informes semanales. Agrega el primero abajo." />
   return (
@@ -412,12 +477,13 @@ function WeeklyView({ items, completions, weekStart, weekEnd, onToggle, onRemove
           <div key={item.id} style={styles.row} onClick={() => onToggle(item.id, localDateStr())}>
             <Led state={state} live={state !== 'done'} />
             <div style={styles.rowMain}>
-              <ItemLabel item={item} done={done} {...renameProps} />
+              <ItemLabel item={item} done={done} {...extraProps} />
             </div>
             <span style={{ ...styles.rowMeta, color: state === 'late' ? 'var(--led-red)' : 'var(--text-faint)' }}>
               {item.target_weekday !== null ? `Meta ${WEEKDAYS_SHORT[item.target_weekday]}` : 'Cualquier día'}
               {' · '}{done ? 'Completado' : isLate ? 'Vencido' : 'Pendiente'}
             </span>
+            <DiagramLink item={item} {...extraProps} />
             <button style={styles.deleteBtn} onClick={e => { e.stopPropagation(); onRemove(item.id) }}><Trash2 size={13} strokeWidth={2} /></button>
           </div>
         )
@@ -432,7 +498,7 @@ const KANBAN_COLS = [
   { key: 'hecho', label: 'Hecho' },
 ]
 
-function KanbanView({ items, onMove, onRemove, ...renameProps }) {
+function KanbanView({ items, onMove, onRemove, ...extraProps }) {
   if (items.length === 0) return <EmptyState text="Sin tareas. Agrega la primera abajo." />
   return (
     <div style={styles.kanban} className="kanban-grid">
@@ -448,13 +514,14 @@ function KanbanView({ items, onMove, onRemove, ...renameProps }) {
             )}
             {items.filter(i => i.status === col.key).map(item => (
               <div key={item.id} style={styles.kanbanCard}>
-                <ItemLabel item={item} done={col.key === 'hecho'} {...renameProps} />
+                <ItemLabel item={item} done={col.key === 'hecho'} {...extraProps} />
                 <div style={styles.kanbanCardActions}>
                   {KANBAN_COLS.filter(c => c.key !== col.key).map(c => (
                     <button key={c.key} style={styles.kanbanMoveBtn} onClick={() => onMove(item.id, c.key)}>
                       <ChevronRight size={11} strokeWidth={2.5} style={{ verticalAlign: -2 }} />{c.label}
                     </button>
                   ))}
+                  <DiagramLink item={item} {...extraProps} />
                   <button style={styles.deleteBtnSmall} onClick={() => onRemove(item.id)}><Trash2 size={12} strokeWidth={2} /></button>
                 </div>
               </div>
@@ -543,6 +610,19 @@ const styles = {
 
   deleteBtn: { background: 'transparent', border: 'none', color: 'var(--text-faint)', padding: 4, display: 'flex' },
   deleteBtnSmall: { background: 'transparent', border: 'none', color: 'var(--text-faint)', padding: '2px 4px', marginLeft: 'auto', display: 'flex' },
+
+  diagLinkWrap: { display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, position: 'relative' },
+  diagLinkBtn: {
+    display: 'flex', alignItems: 'center', gap: 4, background: 'var(--led-blue-glow-bg, rgba(79,184,255,0.1))',
+    border: '1px solid rgba(79,184,255,0.35)', borderRadius: 6, padding: '3px 7px', color: 'var(--led-blue)',
+    fontSize: 11, maxWidth: 120,
+  },
+  diagLinkName: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  diagSelect: {
+    background: 'transparent', border: '1px solid var(--steel-line)', borderRadius: 6, color: 'var(--text-faint)',
+    fontSize: 11, padding: '3px 4px', maxWidth: 26, appearance: 'none', textAlign: 'center', cursor: 'pointer',
+  },
+  diagSelectLinked: { maxWidth: 20, opacity: 0.7 },
 
   empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'var(--text-faint)', padding: '44px 0', textAlign: 'center', fontSize: 13.5, marginBottom: 20 },
 
