@@ -107,6 +107,9 @@ input, textarea, select { font-family: inherit; }
 
 @media (max-width: 720px) {
   .kanban-grid { grid-template-columns: 1fr !important; }
+  .diagrams-wrap { flex-direction: column !important; height: auto !important; }
+  .diagrams-wrap > div:first-child { width: 100% !important; }
+  .diagrams-wrap > div:last-child { height: 60vh !important; }
 }
 
 @media (max-width: 560px) {

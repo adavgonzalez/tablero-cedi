@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react'
 import {
   Sun, CalendarDays, LayoutGrid, Flame, Trash2, Pencil,
-  Plus, Clock, CheckCircle2, Radio, ChevronRight, Circle,
+  Plus, Clock, CheckCircle2, Radio, ChevronRight, Circle, PenLine,
 } from 'lucide-react'
 import { supabase } from './supabase'
+
+const DiagramsView = lazy(() => import('./DiagramsView'))
 
 const WEEKDAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const WEEKDAYS_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -47,6 +49,7 @@ const TABS = [
   { key: 'diario', label: 'Diario', Icon: Sun },
   { key: 'semanal', label: 'Semanal', Icon: CalendarDays },
   { key: 'tarea', label: 'Tareas', Icon: LayoutGrid },
+  { key: 'diagramas', label: 'Diagramas', Icon: PenLine },
 ]
 
 export default function App() {
@@ -161,7 +164,7 @@ export default function App() {
   })()
 
   return (
-    <div style={styles.app}>
+    <div style={{ ...styles.app, maxWidth: tab === 'diagramas' ? 1400 : 920 }}>
       <Header now={now} dailyDone={dailyDone} dailyTotal={daily.length} streak={streak} />
 
       <nav style={styles.tabs}>
@@ -187,7 +190,7 @@ export default function App() {
       </nav>
 
       <main style={styles.main}>
-        {loading ? (
+        {loading && tab !== 'diagramas' ? (
           <div style={styles.loading}>Cargando tablero…</div>
         ) : tab === 'diario' ? (
           <>
@@ -210,13 +213,18 @@ export default function App() {
             renamingId={renamingId} renameValue={renameValue}
             setRenamingId={setRenamingId} setRenameValue={setRenameValue} onRename={renameItem}
           />
-        ) : (
+        ) : tab === 'tarea' ? (
           <KanbanView items={tasks} onMove={moveTask} onRemove={removeItem}
             renamingId={renamingId} renameValue={renameValue}
             setRenamingId={setRenamingId} setRenameValue={setRenameValue} onRename={renameItem}
           />
+        ) : (
+          <Suspense fallback={<div style={styles.loading}>Cargando lienzo…</div>}>
+            <DiagramsView />
+          </Suspense>
         )}
 
+        {tab !== 'diagramas' && (
         <form onSubmit={addItem} style={styles.addForm}>
           <input
             style={styles.input}
@@ -242,6 +250,7 @@ export default function App() {
           )}
           <button type="submit" style={styles.addBtn}><Plus size={15} strokeWidth={2.5} style={{ verticalAlign: -2, marginRight: 4 }} />Agregar</button>
         </form>
+        )}
       </main>
     </div>
   )
