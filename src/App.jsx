@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react'
 import {
   Sun, CalendarDays, LayoutGrid, Flame, Trash2, Pencil,
-  Plus, Clock, CheckCircle2, Radio, ChevronRight, Circle, PenLine, Link2,
+  Plus, Clock, CheckCircle2, Radio, ChevronRight, Circle, PenLine, Link2, Inbox,
 } from 'lucide-react'
 import { supabase } from './supabase'
 import SplitFlap from './SplitFlap'
 
 const DiagramsView = lazy(() => import('./DiagramsView'))
+const InboxView = lazy(() => import('./InboxView'))
 
 const WEEKDAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const WEEKDAYS_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -47,6 +48,7 @@ function turnoLabel(hour) {
 }
 
 const TABS = [
+  { key: 'bandeja', label: 'Bandeja', Icon: Inbox },
   { key: 'diario', label: 'Diario', Icon: Sun },
   { key: 'semanal', label: 'Semanal', Icon: CalendarDays },
   { key: 'tarea', label: 'Tareas', Icon: LayoutGrid },
@@ -66,6 +68,7 @@ export default function App() {
   const [renameValue, setRenameValue] = useState('')
   const [diagrams, setDiagrams] = useState([])
   const [diagramFocusId, setDiagramFocusId] = useState(null)
+  const [peticionesCount, setPeticionesCount] = useState(0)
 
   const today = localDateStr()
   const { start: weekStart, end: weekEnd } = weekRange()
@@ -102,14 +105,16 @@ export default function App() {
     }
     setLoading(true)
     const cutoff = localDateStr(addDays(new Date(), -HISTORY_DAYS))
-    const [{ data: itemsData }, { data: compData }, { data: diagramsData }] = await Promise.all([
+    const [{ data: itemsData }, { data: compData }, { data: diagramsData }, { count: petCount }] = await Promise.all([
       supabase.from('informes_items').select('*').eq('archived', false).order('position', { ascending: true }),
       supabase.from('informes_completions').select('*').gte('completed_date', cutoff),
       supabase.from('diagrams').select('id, name').eq('archived', false).order('position', { ascending: true }),
+      supabase.from('peticiones').select('id', { count: 'exact', head: true }).eq('estado', 'abierta'),
     ])
     setItems(itemsData || [])
     setCompletions(compData || [])
     setDiagrams(diagramsData || [])
+    setPeticionesCount(petCount || 0)
     setLoading(false)
   }, [])
 
@@ -120,6 +125,7 @@ export default function App() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'informes_items' }, load)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'informes_completions' }, load)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'diagrams' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'peticiones' }, load)
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [load])
@@ -230,6 +236,9 @@ export default function App() {
           >
             <t.Icon size={15} strokeWidth={2.25} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t.label}
+            {t.key === 'bandeja' && peticionesCount > 0 && (
+              <span style={{ ...styles.tabCount, background: 'var(--late)', color: '#fff' }}>{peticionesCount}</span>
+            )}
             {t.key === 'diario' && daily.length > 0 && (
               <span style={{ ...styles.tabCount, ...(dailyDone === daily.length ? styles.tabCountDone : {}) }}>{dailyDone}/{daily.length}</span>
             )}
@@ -244,8 +253,12 @@ export default function App() {
       </nav>
 
       <main style={styles.main}>
-        {loading && tab !== 'diagramas' ? (
+        {loading && tab !== 'diagramas' && tab !== 'bandeja' ? (
           <div style={styles.loading}>Cargando tablero…</div>
+        ) : tab === 'bandeja' ? (
+          <Suspense fallback={<div style={styles.loading}>Cargando bandeja…</div>}>
+            <InboxView onConverted={() => { load(); setTab('diario') }} />
+          </Suspense>
         ) : tab === 'diario' ? (
           <>
             {boardClean && <CleanBoardBanner />}
@@ -281,7 +294,7 @@ export default function App() {
           </Suspense>
         )}
 
-        {tab !== 'diagramas' && (
+        {tab !== 'diagramas' && tab !== 'bandeja' && (
         <form onSubmit={addItem} style={styles.addForm}>
           <input
             style={styles.input}
