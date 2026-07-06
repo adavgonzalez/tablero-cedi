@@ -11,16 +11,45 @@
       #boot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
       #boot .dot{width:10px;height:10px;border-radius:50%;background:#ffb62e;box-shadow:0 0 12px rgba(255,182,46,.6);animation:bp 1s ease-in-out infinite}
       #boot b{font-size:15px;letter-spacing:2px;color:#ffb62e;font-weight:700}
-      #boot small{color:#8b8676;font-size:12px;max-width:320px;line-height:1.5}
-      @keyframes bp{0%,100%{opacity:1}50%{opacity:.3}}
+      #boot small{color:#8b8676;font-size:12px;max-width:340px;line-height:1.5}
+      #boot pre{white-space:pre-wrap;word-break:break-word;text-align:left;background:#141319;border:1px solid #2a2833;border-radius:8px;padding:10px;font-size:11px;color:#ff9a9a;max-width:340px;margin:6px 0 0}
     </style>
+    <script>
+      (function () {
+        function show(kind, msg) {
+          var b = document.getElementById('boot');
+          if (!b) return;
+          b.innerHTML =
+            '<b style="color:#ff5757">' + kind + '</b>' +
+            '<small>El navegador no pudo iniciar la app. Comparte este detalle:</small>' +
+            '<pre>' + String(msg).slice(0, 600) + '</pre>';
+        }
+        window.addEventListener('error', function (e) {
+          var m = e.message || (e.error && e.error.message) || 'error';
+          if (e.filename) m += '\n@ ' + e.filename + ':' + e.lineno + ':' + e.colno;
+          show('ERROR DE CARGA', m);
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e.reason;
+          show('ERROR (promesa)', (r && (r.stack || r.message)) || r);
+        });
+        // If React never mounts within 8s, surface a hint.
+        setTimeout(function () {
+          var b = document.getElementById('boot');
+          if (b && b.querySelector('.dot')) {
+            var s = b.querySelector('small');
+            if (s) s.textContent = 'Sigue cargando… si no avanza, tu navegador puede ser una versión antigua. Dime marca/modelo del teléfono y navegador.';
+          }
+        }, 8000);
+      })();
+    </script>
   </head>
   <body>
     <div id="root">
       <div id="boot">
         <span class="dot"></span>
         <b>TABLERO CEDI</b>
-        <small>Iniciando el tablero… Si este mensaje no desaparece en unos segundos, avísame — significa que el navegador no pudo cargar la app.</small>
+        <small>Iniciando el tablero…</small>
       </div>
     </div>
     <script type="module" src="/src/main.jsx"></script>
