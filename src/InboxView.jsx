@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Trash2, Archive, Clock, User, ChevronDown, ChevronUp,
-  ArrowRightCircle, Inbox as InboxIcon, AlertTriangle,
+  ArrowRightCircle, Inbox as InboxIcon, AlertTriangle, RotateCcw, Tag,
 } from 'lucide-react'
 import { supabase } from './supabase'
+import { AREAS, areaMeta } from './constants'
 
 const PRIORIDADES = [
   { key: 'alta', label: 'Alta', color: 'var(--late)' },
@@ -30,12 +31,14 @@ export default function InboxView({ onConverted }) {
   const [peticiones, setPeticiones] = useState([])
   const [loading, setLoading] = useState(true)
   const [orden, setOrden] = useState('prioridad') // 'prioridad' | 'fecha' | 'reciente'
+  const [filtroEstado, setFiltroEstado] = useState('abierta') // 'abierta' | 'convertida' | 'archivada'
   const [expandId, setExpandId] = useState(null)
 
   // form
   const [titulo, setTitulo] = useState('')
   const [solicitante, setSolicitante] = useState('')
   const [prioridad, setPrioridad] = useState('media')
+  const [area, setArea] = useState('')
   const [fechaLimite, setFechaLimite] = useState('')
   const [nota, setNota] = useState('')
   const [showDetails, setShowDetails] = useState(false)
@@ -43,9 +46,9 @@ export default function InboxView({ onConverted }) {
   const load = useCallback(async () => {
     if (typeof window !== 'undefined' && window.location.search.includes('demo')) {
       setPeticiones([
-        { id: 'p1', titulo: 'Reporte de devoluciones por transportadora', solicitante: 'Jefe de operaciones', prioridad: 'alta', fecha_limite: localDateStr(), nota: 'Lo necesita para el comité del viernes. Cruzar con motivos de devolución.', estado: 'abierta', created_at: new Date().toISOString() },
-        { id: 'p2', titulo: 'Indicador de productividad por operario', solicitante: 'RRHH', prioridad: 'media', fecha_limite: null, nota: null, estado: 'abierta', created_at: new Date().toISOString() },
-        { id: 'p3', titulo: 'Validar stock Sabaneta antes de facturar', solicitante: 'Comercial Grival', prioridad: 'baja', fecha_limite: '2026-07-01', nota: null, estado: 'abierta', created_at: new Date().toISOString() },
+        { id: 'p1', titulo: 'Reporte de devoluciones por transportadora', solicitante: 'Jefe de operaciones', prioridad: 'alta', area: 'facturacion', fecha_limite: localDateStr(), nota: 'Lo necesita para el comité del viernes. Cruzar con motivos de devolución.', estado: 'abierta', created_at: new Date().toISOString() },
+        { id: 'p2', titulo: 'Indicador de productividad por operario', solicitante: 'RRHH', prioridad: 'media', area: 'picking', fecha_limite: null, nota: null, estado: 'abierta', created_at: new Date().toISOString() },
+        { id: 'p3', titulo: 'Validar stock Sabaneta antes de facturar', solicitante: 'Comercial Grival', prioridad: 'baja', area: 'inventario', fecha_limite: '2026-07-01', nota: null, estado: 'abierta', created_at: new Date().toISOString() },
       ])
       setLoading(false)
       return
@@ -54,11 +57,11 @@ export default function InboxView({ onConverted }) {
     const { data } = await supabase
       .from('peticiones')
       .select('*')
-      .eq('estado', 'abierta')
+      .eq('estado', filtroEstado)
       .order('created_at', { ascending: false })
     setPeticiones(data || [])
     setLoading(false)
-  }, [])
+  }, [filtroEstado])
 
   useEffect(() => {
     load()
@@ -76,15 +79,21 @@ export default function InboxView({ onConverted }) {
       titulo: titulo.trim(),
       solicitante: solicitante.trim() || null,
       prioridad,
+      area: area || null,
       fecha_limite: fechaLimite || null,
       nota: nota.trim() || null,
     })
-    setTitulo(''); setSolicitante(''); setPrioridad('media'); setFechaLimite(''); setNota(''); setShowDetails(false)
+    setTitulo(''); setSolicitante(''); setPrioridad('media'); setArea(''); setFechaLimite(''); setNota(''); setShowDetails(false)
     load()
   }
 
   async function archivar(id) {
     await supabase.from('peticiones').update({ estado: 'archivada', updated_at: new Date().toISOString() }).eq('id', id)
+    load()
+  }
+
+  async function reabrir(id) {
+    await supabase.from('peticiones').update({ estado: 'abierta', convertido_a: null, updated_at: new Date().toISOString() }).eq('id', id)
     load()
   }
 
@@ -94,7 +103,6 @@ export default function InboxView({ onConverted }) {
   }
 
   async function convertir(pet, categoria) {
-    // create the informes_items record from the request
     const { data: item } = await supabase
       .from('informes_items')
       .insert({
@@ -103,6 +111,8 @@ export default function InboxView({ onConverted }) {
         position: 999,
         target_weekday: categoria === 'semanal' ? 5 : null,
         status: 'backlog',
+        area: pet.area || null,
+        nota: pet.nota || null,
       })
       .select('id')
       .single()
@@ -125,6 +135,7 @@ export default function InboxView({ onConverted }) {
 
   return (
     <div>
+      {filtroEstado === 'abierta' && (
       <form onSubmit={addPeticion} style={styles.capture}>
         <div style={styles.captureTop}>
           <input
@@ -144,22 +155,30 @@ export default function InboxView({ onConverted }) {
             <select style={styles.detailSelect} value={prioridad} onChange={e => setPrioridad(e.target.value)}>
               {PRIORIDADES.map(p => <option key={p.key} value={p.key}>Prioridad: {p.label}</option>)}
             </select>
+            <select style={styles.detailSelect} value={area} onChange={e => setArea(e.target.value)}>
+              <option value="">Área…</option>
+              {AREAS.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
+            </select>
             <input type="date" style={{ ...styles.detailSelect, colorScheme: 'dark' }} value={fechaLimite} onChange={e => setFechaLimite(e.target.value)} title="Fecha límite" />
             <input style={styles.detailInput} placeholder="Nota (opcional)…" value={nota} onChange={e => setNota(e.target.value)} />
           </div>
         )}
       </form>
+      )}
 
       <div style={styles.toolbar}>
-        <span style={styles.count}>
-          <InboxIcon size={13} strokeWidth={2.25} style={{ verticalAlign: -2, marginRight: 5 }} />
-          {peticiones.length} {peticiones.length === 1 ? 'petición abierta' : 'peticiones abiertas'}
-        </span>
-        <div style={styles.orderTabs}>
-          {[['prioridad', 'Prioridad'], ['fecha', 'Fecha límite'], ['reciente', 'Recientes']].map(([k, l]) => (
-            <button key={k} onClick={() => setOrden(k)} style={{ ...styles.orderTab, ...(orden === k ? styles.orderTabActive : {}) }}>{l}</button>
+        <div style={styles.estadoTabs}>
+          {[['abierta', 'Abiertas'], ['convertida', 'Convertidas'], ['archivada', 'Archivadas']].map(([k, l]) => (
+            <button key={k} onClick={() => { setFiltroEstado(k); setExpandId(null) }} style={{ ...styles.estadoTab, ...(filtroEstado === k ? styles.estadoTabActive : {}) }}>{l}</button>
           ))}
         </div>
+        {filtroEstado === 'abierta' && (
+          <div style={styles.orderTabs}>
+            {[['prioridad', 'Prioridad'], ['fecha', 'Fecha límite'], ['reciente', 'Recientes']].map(([k, l]) => (
+              <button key={k} onClick={() => setOrden(k)} style={{ ...styles.orderTab, ...(orden === k ? styles.orderTabActive : {}) }}>{l}</button>
+            ))}
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -167,7 +186,7 @@ export default function InboxView({ onConverted }) {
       ) : ordenadas.length === 0 ? (
         <div style={styles.empty}>
           <InboxIcon size={22} strokeWidth={1.5} color="var(--text-faint)" style={{ marginBottom: 8 }} />
-          <div>Bandeja vacía. Cuando te pidan algo, captúralo aquí en 2 segundos.</div>
+          <div>{filtroEstado === 'abierta' ? 'Bandeja vacía. Cuando te pidan algo, captúralo aquí en 2 segundos.' : filtroEstado === 'convertida' ? 'Aún no has convertido peticiones en informes o tareas.' : 'No hay peticiones archivadas.'}</div>
         </div>
       ) : (
         <div style={styles.list}>
@@ -185,6 +204,11 @@ export default function InboxView({ onConverted }) {
                     <span style={styles.cardTitle}>{pet.titulo}</span>
                   </div>
                   <div style={styles.cardMeta}>
+                    {pet.area && areaMeta(pet.area) && (
+                      <span style={{ ...styles.areaChip, color: areaMeta(pet.area).color, borderColor: areaMeta(pet.area).color }}>
+                        <Tag size={9} strokeWidth={2.5} /> {areaMeta(pet.area).label}
+                      </span>
+                    )}
                     {pet.solicitante && <span style={styles.metaChip}><User size={10} strokeWidth={2.5} /> {pet.solicitante}</span>}
                     {pet.fecha_limite && (
                       <span style={{ ...styles.metaChip, color: vencido ? 'var(--late)' : hoy ? 'var(--accent)' : 'var(--text-dim)' }}>
@@ -192,22 +216,34 @@ export default function InboxView({ onConverted }) {
                         {vencido ? `Vencida hace ${Math.abs(dr)}d` : hoy ? 'Vence hoy' : dr === 1 ? 'Vence mañana' : `${dr}d restantes`}
                       </span>
                     )}
+                    {pet.convertido_a && <span style={styles.convertedChip}>→ {pet.convertido_a}</span>}
                     <span style={{ ...styles.prioTag, color: prio.color, borderColor: prio.color }}>{prio.label.toUpperCase()}</span>
                   </div>
                   {expanded && pet.nota && <div style={styles.nota}>{pet.nota}</div>}
                 </div>
 
                 <div style={styles.cardActions}>
-                  <div style={styles.convertGroup}>
-                    <span style={styles.convertLabel}><ArrowRightCircle size={12} strokeWidth={2.25} /> Convertir en:</span>
-                    <button style={styles.convBtn} onClick={() => convertir(pet, 'diario')}>Diario</button>
-                    <button style={styles.convBtn} onClick={() => convertir(pet, 'semanal')}>Semanal</button>
-                    <button style={styles.convBtn} onClick={() => convertir(pet, 'tarea')}>Tarea</button>
-                  </div>
-                  <div style={styles.endActions}>
-                    <button style={styles.iconBtn} title="Archivar" onClick={() => archivar(pet.id)}><Archive size={14} strokeWidth={2} /></button>
-                    <button style={styles.iconBtn} title="Eliminar" onClick={() => eliminar(pet.id)}><Trash2 size={14} strokeWidth={2} /></button>
-                  </div>
+                  {filtroEstado === 'abierta' ? (
+                    <>
+                      <div style={styles.convertGroup}>
+                        <span style={styles.convertLabel}><ArrowRightCircle size={12} strokeWidth={2.25} /> Convertir en:</span>
+                        <button style={styles.convBtn} onClick={() => convertir(pet, 'diario')}>Diario</button>
+                        <button style={styles.convBtn} onClick={() => convertir(pet, 'semanal')}>Semanal</button>
+                        <button style={styles.convBtn} onClick={() => convertir(pet, 'tarea')}>Tarea</button>
+                      </div>
+                      <div style={styles.endActions}>
+                        <button style={styles.iconBtn} title="Archivar" onClick={() => archivar(pet.id)}><Archive size={14} strokeWidth={2} /></button>
+                        <button style={styles.iconBtn} title="Eliminar" onClick={() => eliminar(pet.id)}><Trash2 size={14} strokeWidth={2} /></button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <button style={styles.reabrirBtn} onClick={() => reabrir(pet.id)}><RotateCcw size={12} strokeWidth={2.25} /> Reabrir</button>
+                      <div style={styles.endActions}>
+                        <button style={styles.iconBtn} title="Eliminar" onClick={() => eliminar(pet.id)}><Trash2 size={14} strokeWidth={2} /></button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )
@@ -229,10 +265,17 @@ const styles = {
   detailSelect: { background: 'var(--void-2)', border: '1px solid var(--edge)', borderRadius: 8, padding: '9px 10px', color: 'var(--text)', fontSize: 13 },
 
   toolbar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 10 },
+  estadoTabs: { display: 'flex', gap: 5 },
+  estadoTab: { background: 'var(--panel)', border: '1px solid var(--edge-soft)', color: 'var(--text-faint)', borderRadius: 7, padding: '6px 13px', fontSize: 12, fontWeight: 700 },
+  estadoTabActive: { borderColor: 'var(--accent-deep)', color: 'var(--accent)', background: 'linear-gradient(180deg, var(--panel-hi), var(--panel))' },
   count: { fontSize: 12, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontWeight: 600, letterSpacing: 0.3 },
   orderTabs: { display: 'flex', gap: 5 },
   orderTab: { background: 'var(--panel)', border: '1px solid var(--edge-soft)', color: 'var(--text-faint)', borderRadius: 7, padding: '5px 11px', fontSize: 11.5, fontWeight: 600 },
   orderTabActive: { borderColor: 'var(--accent-deep)', color: 'var(--accent)' },
+
+  areaChip: { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5, padding: '2px 7px', border: '1px solid', borderRadius: 5, fontFamily: 'var(--font-mono)' },
+  convertedChip: { fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5, padding: '2px 7px', borderRadius: 5, background: 'rgba(53,208,127,0.12)', color: 'var(--go)', fontFamily: 'var(--font-mono)', textTransform: 'capitalize' },
+  reabrirBtn: { display: 'inline-flex', alignItems: 'center', gap: 5, background: 'transparent', border: '1px solid var(--accent-deep)', color: 'var(--accent)', borderRadius: 7, padding: '6px 13px', fontSize: 12, fontWeight: 700 },
 
   loading: { color: 'var(--text-dim)', padding: 40, textAlign: 'center', fontFamily: 'var(--font-mono)' },
   empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'var(--text-faint)', padding: '44px 20px', textAlign: 'center', fontSize: 13.5 },

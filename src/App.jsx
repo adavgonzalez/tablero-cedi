@@ -2,12 +2,15 @@ import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react'
 import {
   Sun, CalendarDays, LayoutGrid, Flame, Trash2, Pencil,
   Plus, Clock, CheckCircle2, Radio, ChevronRight, Circle, PenLine, Link2, Inbox,
+  ListChecks, NotebookPen, Tag, ChevronDown, StickyNote,
 } from 'lucide-react'
 import { supabase } from './supabase'
 import SplitFlap from './SplitFlap'
+import { AREAS, areaMeta } from './constants'
 
 const DiagramsView = lazy(() => import('./DiagramsView'))
 const InboxView = lazy(() => import('./InboxView'))
+const BitacoraView = lazy(() => import('./BitacoraView'))
 
 const WEEKDAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const WEEKDAYS_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -48,15 +51,17 @@ function turnoLabel(hour) {
 }
 
 const TABS = [
+  { key: 'hoy', label: 'Hoy', Icon: ListChecks },
   { key: 'bandeja', label: 'Bandeja', Icon: Inbox },
   { key: 'diario', label: 'Diario', Icon: Sun },
   { key: 'semanal', label: 'Semanal', Icon: CalendarDays },
   { key: 'tarea', label: 'Tareas', Icon: LayoutGrid },
   { key: 'diagramas', label: 'Diagramas', Icon: PenLine },
+  { key: 'bitacora', label: 'Bitácora', Icon: NotebookPen },
 ]
 
 export default function App() {
-  const [tab, setTab] = useState('diario')
+  const [tab, setTab] = useState('hoy')
   const [items, setItems] = useState([])
   const [completions, setCompletions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -69,6 +74,8 @@ export default function App() {
   const [diagrams, setDiagrams] = useState([])
   const [diagramFocusId, setDiagramFocusId] = useState(null)
   const [peticionesCount, setPeticionesCount] = useState(0)
+  const [peticionesUrgentes, setPeticionesUrgentes] = useState([])
+  const [expandedItemId, setExpandedItemId] = useState(null)
 
   const today = localDateStr()
   const { start: weekStart, end: weekEnd } = weekRange()
@@ -100,21 +107,28 @@ export default function App() {
         { id: 'c4', item_id: 'd2', completed_date: y },
       ])
       setDiagrams([{ id: 'g1', name: 'Pipeline SAP' }])
+      setPeticionesCount(3)
+      setPeticionesUrgentes([
+        { id: 'p1', titulo: 'Reporte de devoluciones por transportadora', prioridad: 'alta', area: 'facturacion', fecha_limite: localDateStr() },
+      ])
       setLoading(false)
       return
     }
     setLoading(true)
     const cutoff = localDateStr(addDays(new Date(), -HISTORY_DAYS))
-    const [{ data: itemsData }, { data: compData }, { data: diagramsData }, { count: petCount }] = await Promise.all([
+    const today2 = localDateStr()
+    const [{ data: itemsData }, { data: compData }, { data: diagramsData }, { count: petCount }, { data: urgentes }] = await Promise.all([
       supabase.from('informes_items').select('*').eq('archived', false).order('position', { ascending: true }),
       supabase.from('informes_completions').select('*').gte('completed_date', cutoff),
       supabase.from('diagrams').select('id, name').eq('archived', false).order('position', { ascending: true }),
       supabase.from('peticiones').select('id', { count: 'exact', head: true }).eq('estado', 'abierta'),
+      supabase.from('peticiones').select('id, titulo, prioridad, area, fecha_limite').eq('estado', 'abierta').or(`prioridad.eq.alta,fecha_limite.lte.${today2}`).order('fecha_limite', { ascending: true }),
     ])
     setItems(itemsData || [])
     setCompletions(compData || [])
     setDiagrams(diagramsData || [])
     setPeticionesCount(petCount || 0)
+    setPeticionesUrgentes(urgentes || [])
     setLoading(false)
   }, [])
 
@@ -176,6 +190,11 @@ export default function App() {
     load()
   }
 
+  async function saveItemMeta(id, patch) {
+    await supabase.from('informes_items').update(patch).eq('id', id)
+    load()
+  }
+
   async function linkDiagram(itemId, diagramId) {
     await supabase.from('informes_items').update({ diagram_id: diagramId }).eq('id', itemId)
     load()
@@ -208,6 +227,11 @@ export default function App() {
   const weeklyDone = weekly.filter(i => completions.some(c => c.item_id === i.id && c.completed_date >= weekStart && c.completed_date <= weekEnd)).length
   const boardClean = daily.length > 0 && dailyDone === daily.length
 
+  const todayDow = new Date().getDay()
+  const dailyPendientes = daily.filter(i => !completions.some(c => c.item_id === i.id && c.completed_date === today)).length
+  const weeklyHoy = weekly.filter(i => i.target_weekday === todayDow && !completions.some(c => c.item_id === i.id && c.completed_date >= weekStart && c.completed_date <= weekEnd)).length
+  const urgentesHoy = peticionesUrgentes.length
+
   // Streak: consecutive days (ending today, or yesterday if today incomplete) where every daily item was completed.
   const streak = (() => {
     if (daily.length === 0) return 0
@@ -236,6 +260,9 @@ export default function App() {
           >
             <t.Icon size={15} strokeWidth={2.25} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t.label}
+            {t.key === 'hoy' && (dailyPendientes + weeklyHoy + urgentesHoy) > 0 && (
+              <span style={{ ...styles.tabCount, background: 'var(--accent)', color: '#1a1200' }}>{dailyPendientes + weeklyHoy + urgentesHoy}</span>
+            )}
             {t.key === 'bandeja' && peticionesCount > 0 && (
               <span style={{ ...styles.tabCount, background: 'var(--late)', color: '#fff' }}>{peticionesCount}</span>
             )}
@@ -253,11 +280,22 @@ export default function App() {
       </nav>
 
       <main style={styles.main}>
-        {loading && tab !== 'diagramas' && tab !== 'bandeja' ? (
+        {loading && tab !== 'diagramas' && tab !== 'bandeja' && tab !== 'bitacora' ? (
           <div style={styles.loading}>Cargando tablero…</div>
+        ) : tab === 'hoy' ? (
+          <HoyView
+            daily={daily} weekly={weekly} tasks={tasks} completions={completions}
+            today={today} weekStart={weekStart} weekEnd={weekEnd} todayDow={todayDow}
+            peticionesUrgentes={peticionesUrgentes} now={now}
+            onToggle={toggleCompletion} goTo={setTab}
+          />
         ) : tab === 'bandeja' ? (
           <Suspense fallback={<div style={styles.loading}>Cargando bandeja…</div>}>
-            <InboxView onConverted={() => { load(); setTab('diario') }} />
+            <InboxView onConverted={() => { load() }} />
+          </Suspense>
+        ) : tab === 'bitacora' ? (
+          <Suspense fallback={<div style={styles.loading}>Cargando bitácora…</div>}>
+            <BitacoraView />
           </Suspense>
         ) : tab === 'diario' ? (
           <>
@@ -272,6 +310,7 @@ export default function App() {
               renamingId={renamingId} renameValue={renameValue}
               setRenamingId={setRenamingId} setRenameValue={setRenameValue} onRename={renameItem}
               diagrams={diagrams} onLinkDiagram={linkDiagram} onCreateDiagram={createDiagramForItem} onJumpDiagram={jumpToDiagram}
+              expandedItemId={expandedItemId} setExpandedItemId={setExpandedItemId} onSaveMeta={saveItemMeta}
             />
           </>
         ) : tab === 'semanal' ? (
@@ -281,12 +320,14 @@ export default function App() {
             renamingId={renamingId} renameValue={renameValue}
             setRenamingId={setRenamingId} setRenameValue={setRenameValue} onRename={renameItem}
             diagrams={diagrams} onLinkDiagram={linkDiagram} onCreateDiagram={createDiagramForItem} onJumpDiagram={jumpToDiagram}
+            expandedItemId={expandedItemId} setExpandedItemId={setExpandedItemId} onSaveMeta={saveItemMeta}
           />
         ) : tab === 'tarea' ? (
           <KanbanView items={tasks} onMove={moveTask} onRemove={removeItem}
             renamingId={renamingId} renameValue={renameValue}
             setRenamingId={setRenamingId} setRenameValue={setRenameValue} onRename={renameItem}
             diagrams={diagrams} onLinkDiagram={linkDiagram} onCreateDiagram={createDiagramForItem} onJumpDiagram={jumpToDiagram}
+            expandedItemId={expandedItemId} setExpandedItemId={setExpandedItemId} onSaveMeta={saveItemMeta}
           />
         ) : (
           <Suspense fallback={<div style={styles.loading}>Cargando lienzo…</div>}>
@@ -294,7 +335,7 @@ export default function App() {
           </Suspense>
         )}
 
-        {tab !== 'diagramas' && tab !== 'bandeja' && (
+        {tab !== 'diagramas' && tab !== 'bandeja' && tab !== 'bitacora' && tab !== 'hoy' && (
         <form onSubmit={addItem} style={styles.addForm}>
           <input
             style={styles.input}
@@ -511,7 +552,157 @@ function ItemLabel({ item, done, renamingId, renameValue, setRenamingId, setRena
   )
 }
 
-function DailyView({ items, completions, today, now, onToggle, onRemove, ...extraProps }) {
+function HoyView({ daily, weekly, tasks, completions, today, weekStart, weekEnd, todayDow, peticionesUrgentes, now, onToggle, goTo }) {
+  const nowMin = now.getHours() * 60 + now.getMinutes()
+
+  const dailyPend = daily
+    .filter(i => !completions.some(c => c.item_id === i.id && c.completed_date === today))
+    .sort((a, b) => (a.target_time || '99:99').localeCompare(b.target_time || '99:99'))
+  const weeklyPend = weekly.filter(i => i.target_weekday === todayDow && !completions.some(c => c.item_id === i.id && c.completed_date >= weekStart && c.completed_date <= weekEnd))
+  const tareasActivas = tasks.filter(t => t.status !== 'hecho')
+
+  const totalHoy = dailyPend.length + weeklyPend.length + peticionesUrgentes.length
+  const allClear = totalHoy === 0 && daily.length > 0
+
+  return (
+    <div>
+      {allClear ? (
+        <div style={styles.hoyClear} className="banner-rise">
+          <span className="led-live" style={{ ...styles.led, width: 10, height: 10, background: 'var(--go)', '--gc': 'var(--go-glow)' }} />
+          <div>
+            <div style={{ fontFamily: 'var(--font-sign)', fontSize: 22, fontWeight: 800, color: 'var(--go)', letterSpacing: 0.5 }}>DÍA AL DÍA</div>
+            <div style={{ color: 'var(--text-dim)', fontSize: 13 }}>No tienes pendientes urgentes para hoy. Buen trabajo.</div>
+          </div>
+        </div>
+      ) : (
+        <div style={styles.hoyIntro}>
+          <span style={styles.hoyIntroBig}>{totalHoy}</span>
+          <span style={styles.hoyIntroLabel}>{totalHoy === 1 ? 'cosa pendiente para hoy' : 'cosas pendientes para hoy'}</span>
+        </div>
+      )}
+
+      {peticionesUrgentes.length > 0 && (
+        <HoySection title="Peticiones urgentes" count={peticionesUrgentes.length} tone="var(--late)" onVerMas={() => goTo('bandeja')}>
+          {peticionesUrgentes.map(p => (
+            <div key={p.id} style={styles.hoyRow} onClick={() => goTo('bandeja')}>
+              <span style={{ ...styles.hoyDot, background: 'var(--late)', boxShadow: '0 0 7px var(--late-glow)' }} />
+              <span style={styles.hoyRowText}>{p.titulo}</span>
+              {areaMeta(p.area) && <ItemAreaChip area={p.area} />}
+              <span style={styles.hoyRowMeta}>{p.prioridad === 'alta' ? 'ALTA' : (p.fecha_limite === today ? 'VENCE HOY' : '')}</span>
+            </div>
+          ))}
+        </HoySection>
+      )}
+
+      {dailyPend.length > 0 && (
+        <HoySection title="Informes diarios por enviar" count={dailyPend.length} tone="var(--accent)" onVerMas={() => goTo('diario')}>
+          {dailyPend.map(item => {
+            let late = false
+            if (item.target_time) { const [h, m] = item.target_time.split(':').map(Number); late = nowMin > h * 60 + m }
+            return (
+              <div key={item.id} style={styles.hoyRow} onClick={() => onToggle(item.id, today)} title="Marcar como enviado">
+                <span style={{ ...styles.hoyCheck, borderColor: late ? 'var(--late)' : 'var(--wait)' }} />
+                <span style={styles.hoyRowText}>{item.name}</span>
+                <ItemAreaChip area={item.area} />
+                <span style={{ ...styles.hoyRowMeta, color: late ? 'var(--late)' : 'var(--text-faint)' }}>
+                  {item.target_time ? item.target_time.slice(0, 5) : ''}{late ? ' · VENCIDO' : ''}
+                </span>
+              </div>
+            )
+          })}
+        </HoySection>
+      )}
+
+      {weeklyPend.length > 0 && (
+        <HoySection title="Semanales que vencen hoy" count={weeklyPend.length} tone="var(--accent)" onVerMas={() => goTo('semanal')}>
+          {weeklyPend.map(item => (
+            <div key={item.id} style={styles.hoyRow} onClick={() => onToggle(item.id, today)} title="Marcar como completado">
+              <span style={{ ...styles.hoyCheck, borderColor: 'var(--wait)' }} />
+              <span style={styles.hoyRowText}>{item.name}</span>
+              <ItemAreaChip area={item.area} />
+            </div>
+          ))}
+        </HoySection>
+      )}
+
+      {tareasActivas.length > 0 && (
+        <HoySection title="Tareas en curso" count={tareasActivas.length} tone="var(--text-dim)" onVerMas={() => goTo('tarea')}>
+          {tareasActivas.slice(0, 5).map(item => (
+            <div key={item.id} style={styles.hoyRow} onClick={() => goTo('tarea')}>
+              <span style={{ ...styles.hoyDot, background: item.status === 'en_progreso' ? 'var(--accent)' : 'var(--text-faint)' }} />
+              <span style={styles.hoyRowText}>{item.name}</span>
+              <ItemAreaChip area={item.area} />
+              <span style={styles.hoyRowMeta}>{item.status === 'en_progreso' ? 'EN PROGRESO' : 'BACKLOG'}</span>
+            </div>
+          ))}
+        </HoySection>
+      )}
+    </div>
+  )
+}
+
+function HoySection({ title, count, tone, onVerMas, children }) {
+  return (
+    <div style={styles.hoySection}>
+      <div style={styles.hoySectionHead}>
+        <span style={{ ...styles.hoySectionBar, background: tone }} />
+        <span style={styles.hoySectionTitle}>{title}</span>
+        <span style={{ ...styles.hoySectionCount, color: tone, borderColor: tone }}>{count}</span>
+        <button style={styles.hoyVerMas} onClick={onVerMas}>Ver todo <ChevronRight size={12} strokeWidth={2.5} style={{ verticalAlign: -2 }} /></button>
+      </div>
+      <div style={styles.hoySectionBody}>{children}</div>
+    </div>
+  )
+}
+
+function ItemAreaChip({ area }) {
+  const am = areaMeta(area)
+  if (!am) return null
+  return (
+    <span style={{ ...styles.itemAreaChip, color: am.color, borderColor: am.color }}>
+      <Tag size={9} strokeWidth={2.5} /> {am.label}
+    </span>
+  )
+}
+
+function NoteToggle({ item, expandedItemId, setExpandedItemId }) {
+  const has = item.nota || item.area
+  const open = expandedItemId === item.id
+  return (
+    <button
+      style={{ ...styles.noteToggle, color: open || has ? 'var(--accent)' : 'var(--text-faint)', borderColor: open || has ? 'var(--accent-deep)' : 'var(--edge)' }}
+      title={has ? 'Ver/editar nota y área' : 'Agregar nota y área'}
+      onClick={e => { e.stopPropagation(); setExpandedItemId(open ? null : item.id) }}
+    >
+      <StickyNote size={13} strokeWidth={2} />
+    </button>
+  )
+}
+
+function ItemEditor({ item, onSaveMeta, onClose }) {
+  const [nota, setNota] = useState(item.nota || '')
+  const [area, setArea] = useState(item.area || '')
+  return (
+    <div style={styles.itemEditor} onClick={e => e.stopPropagation()}>
+      <div style={styles.itemEditorRow}>
+        <select style={styles.itemEditorSelect} value={area} onChange={e => { setArea(e.target.value); onSaveMeta(item.id, { area: e.target.value || null }) }}>
+          <option value="">Sin área</option>
+          {AREAS.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
+        </select>
+      </div>
+      <textarea
+        style={styles.itemEditorNota}
+        placeholder="Nota / contexto (ej. hoy no salió por caída de SAP)…"
+        value={nota}
+        rows={2}
+        onChange={e => setNota(e.target.value)}
+        onBlur={() => onSaveMeta(item.id, { nota: nota.trim() || null })}
+      />
+    </div>
+  )
+}
+
+function DailyView({ items, completions, today, now, onToggle, onRemove, expandedItemId, setExpandedItemId, onSaveMeta, ...extraProps }) {
   if (items.length === 0) return <EmptyState text="Sin informes diarios. Agrega el primero abajo." />
   const nowMin = now.getHours() * 60 + now.getMinutes()
   const sorted = [...items].sort((a, b) => (a.target_time || '99:99').localeCompare(b.target_time || '99:99'))
@@ -526,18 +717,25 @@ function DailyView({ items, completions, today, now, onToggle, onRemove, ...extr
           if (nowMin > h * 60 + m) state = 'late'
         }
         return (
-          <div key={item.id} style={{ ...styles.row, animationDelay: `${idx * 45}ms` }} className="row-in" onClick={() => onToggle(item.id, today)}>
-            <Led state={state} live={state !== 'done'} />
-            <div style={styles.rowMain}>
-              <ItemLabel item={item} done={done} {...extraProps} />
-              <HistoryDots itemId={item.id} completions={completions} />
+          <div key={item.id} style={{ animationDelay: `${idx * 45}ms` }} className="row-in">
+            <div style={styles.row} onClick={() => onToggle(item.id, today)}>
+              <Led state={state} live={state !== 'done'} />
+              <div style={styles.rowMain}>
+                <span style={styles.rowLabelLine}>
+                  <ItemLabel item={item} done={done} {...extraProps} />
+                  <ItemAreaChip area={item.area} />
+                </span>
+                <HistoryDots itemId={item.id} completions={completions} />
+              </div>
+              <span style={{ ...styles.rowMeta, color: state === 'late' ? 'var(--late)' : 'var(--text-faint)' }}>
+                {item.target_time && <><Clock size={11} strokeWidth={2.5} style={{ verticalAlign: -2, marginRight: 3 }} />{item.target_time.slice(0, 5)}</>}
+              </span>
+              <StatusTag label={done ? 'ENVIADO' : state === 'late' ? 'VENCIDO' : 'PENDIENTE'} tone={done ? 'done' : state === 'late' ? 'late' : 'pending'} />
+              <NoteToggle item={item} expandedItemId={expandedItemId} setExpandedItemId={setExpandedItemId} />
+              <DiagramLink item={item} {...extraProps} />
+              <button style={styles.deleteBtn} onClick={e => { e.stopPropagation(); onRemove(item.id) }}><Trash2 size={13} strokeWidth={2} /></button>
             </div>
-            <span style={{ ...styles.rowMeta, color: state === 'late' ? 'var(--late)' : 'var(--text-faint)' }}>
-              {item.target_time && <><Clock size={11} strokeWidth={2.5} style={{ verticalAlign: -2, marginRight: 3 }} />{item.target_time.slice(0, 5)}</>}
-            </span>
-            <StatusTag label={done ? 'ENVIADO' : state === 'late' ? 'VENCIDO' : 'PENDIENTE'} tone={done ? 'done' : state === 'late' ? 'late' : 'pending'} />
-            <DiagramLink item={item} {...extraProps} />
-            <button style={styles.deleteBtn} onClick={e => { e.stopPropagation(); onRemove(item.id) }}><Trash2 size={13} strokeWidth={2} /></button>
+            {expandedItemId === item.id && <ItemEditor item={item} onSaveMeta={onSaveMeta} />}
           </div>
         )
       })}
@@ -545,7 +743,7 @@ function DailyView({ items, completions, today, now, onToggle, onRemove, ...extr
   )
 }
 
-function WeeklyView({ items, completions, weekStart, weekEnd, onToggle, onRemove, ...extraProps }) {
+function WeeklyView({ items, completions, weekStart, weekEnd, onToggle, onRemove, expandedItemId, setExpandedItemId, onSaveMeta, ...extraProps }) {
   const todayDow = new Date().getDay()
   if (items.length === 0) return <EmptyState text="Sin informes semanales. Agrega el primero abajo." />
   return (
@@ -557,17 +755,24 @@ function WeeklyView({ items, completions, weekStart, weekEnd, onToggle, onRemove
         )
         const state = done ? 'done' : isLate ? 'late' : 'pending'
         return (
-          <div key={item.id} style={{ ...styles.row, animationDelay: `${idx * 45}ms` }} className="row-in" onClick={() => onToggle(item.id, localDateStr())}>
-            <Led state={state} live={state !== 'done'} />
-            <div style={styles.rowMain}>
-              <ItemLabel item={item} done={done} {...extraProps} />
+          <div key={item.id} style={{ animationDelay: `${idx * 45}ms` }} className="row-in">
+            <div style={styles.row} onClick={() => onToggle(item.id, localDateStr())}>
+              <Led state={state} live={state !== 'done'} />
+              <div style={styles.rowMain}>
+                <span style={styles.rowLabelLine}>
+                  <ItemLabel item={item} done={done} {...extraProps} />
+                  <ItemAreaChip area={item.area} />
+                </span>
+              </div>
+              <span style={{ ...styles.rowMeta, color: state === 'late' ? 'var(--late)' : 'var(--text-faint)' }}>
+                {item.target_weekday !== null ? `META ${WEEKDAYS_SHORT[item.target_weekday].toUpperCase()}` : 'CUALQUIER DÍA'}
+              </span>
+              <StatusTag label={done ? 'COMPLETADO' : isLate ? 'VENCIDO' : 'PENDIENTE'} tone={done ? 'done' : isLate ? 'late' : 'pending'} />
+              <NoteToggle item={item} expandedItemId={expandedItemId} setExpandedItemId={setExpandedItemId} />
+              <DiagramLink item={item} {...extraProps} />
+              <button style={styles.deleteBtn} onClick={e => { e.stopPropagation(); onRemove(item.id) }}><Trash2 size={13} strokeWidth={2} /></button>
             </div>
-            <span style={{ ...styles.rowMeta, color: state === 'late' ? 'var(--late)' : 'var(--text-faint)' }}>
-              {item.target_weekday !== null ? `META ${WEEKDAYS_SHORT[item.target_weekday].toUpperCase()}` : 'CUALQUIER DÍA'}
-            </span>
-            <StatusTag label={done ? 'COMPLETADO' : isLate ? 'VENCIDO' : 'PENDIENTE'} tone={done ? 'done' : isLate ? 'late' : 'pending'} />
-            <DiagramLink item={item} {...extraProps} />
-            <button style={styles.deleteBtn} onClick={e => { e.stopPropagation(); onRemove(item.id) }}><Trash2 size={13} strokeWidth={2} /></button>
+            {expandedItemId === item.id && <ItemEditor item={item} onSaveMeta={onSaveMeta} />}
           </div>
         )
       })}
@@ -581,7 +786,7 @@ const KANBAN_COLS = [
   { key: 'hecho', label: 'Hecho' },
 ]
 
-function KanbanView({ items, onMove, onRemove, ...extraProps }) {
+function KanbanView({ items, onMove, onRemove, expandedItemId, setExpandedItemId, onSaveMeta, ...extraProps }) {
   if (items.length === 0) return <EmptyState text="Sin tareas. Agrega la primera abajo." />
   return (
     <div style={styles.kanban} className="kanban-grid">
@@ -597,16 +802,22 @@ function KanbanView({ items, onMove, onRemove, ...extraProps }) {
             )}
             {items.filter(i => i.status === col.key).map(item => (
               <div key={item.id} style={styles.kanbanCard}>
-                <ItemLabel item={item} done={col.key === 'hecho'} {...extraProps} />
+                <span style={styles.rowLabelLine}>
+                  <ItemLabel item={item} done={col.key === 'hecho'} {...extraProps} />
+                  <ItemAreaChip area={item.area} />
+                </span>
+                {item.nota && <div style={styles.kanbanNota}>{item.nota}</div>}
                 <div style={styles.kanbanCardActions}>
                   {KANBAN_COLS.filter(c => c.key !== col.key).map(c => (
                     <button key={c.key} style={styles.kanbanMoveBtn} onClick={() => onMove(item.id, c.key)}>
                       <ChevronRight size={11} strokeWidth={2.5} style={{ verticalAlign: -2 }} />{c.label}
                     </button>
                   ))}
+                  <NoteToggle item={item} expandedItemId={expandedItemId} setExpandedItemId={setExpandedItemId} />
                   <DiagramLink item={item} {...extraProps} />
                   <button style={styles.deleteBtnSmall} onClick={() => onRemove(item.id)}><Trash2 size={12} strokeWidth={2} /></button>
                 </div>
+                {expandedItemId === item.id && <ItemEditor item={item} onSaveMeta={onSaveMeta} />}
               </div>
             ))}
           </div>
@@ -699,7 +910,35 @@ const styles = {
     transition: 'border-color .16s, transform .12s, box-shadow .16s',
   },
   rowMain: { flex: 1, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 },
+  rowLabelLine: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   rowLabel: { fontSize: 14.5, fontWeight: 500 },
+
+  itemAreaChip: { display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: '1px 6px', border: '1px solid', borderRadius: 4, fontFamily: 'var(--font-mono)', flexShrink: 0 },
+  noteToggle: { background: 'transparent', border: '1px solid', borderRadius: 6, padding: '5px 6px', display: 'flex', flexShrink: 0 },
+  itemEditor: { background: 'var(--void-2)', border: '1px solid var(--edge)', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '11px 14px', marginTop: -4, display: 'flex', flexDirection: 'column', gap: 8 },
+  itemEditorRow: { display: 'flex', gap: 8 },
+  itemEditorSelect: { background: 'var(--panel)', border: '1px solid var(--edge)', borderRadius: 7, padding: '7px 10px', color: 'var(--text)', fontSize: 12.5 },
+  itemEditorNota: { width: '100%', background: 'var(--panel)', border: '1px solid var(--edge)', borderRadius: 7, padding: '8px 11px', color: 'var(--text)', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'var(--font-ui)' },
+
+  hoyIntro: { display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 22, paddingBottom: 16, borderBottom: '1px solid var(--edge-soft)' },
+  hoyIntroBig: { fontFamily: 'var(--font-sign)', fontSize: 52, fontWeight: 900, color: 'var(--accent)', lineHeight: 1, textShadow: '0 0 30px rgba(255,182,46,0.2)' },
+  hoyIntroLabel: { fontSize: 14, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: 0.5 },
+  hoyClear: { display: 'flex', alignItems: 'center', gap: 14, padding: '20px 22px', marginBottom: 20, background: 'linear-gradient(90deg, rgba(53,208,127,0.1), transparent)', border: '1px solid rgba(53,208,127,0.3)', borderRadius: 12 },
+
+  hoySection: { marginBottom: 22 },
+  hoySectionHead: { display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 },
+  hoySectionBar: { width: 4, height: 16, borderRadius: 2 },
+  hoySectionTitle: { fontSize: 13, fontWeight: 700, color: 'var(--text)', letterSpacing: 0.3 },
+  hoySectionCount: { fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--font-mono)', border: '1px solid', borderRadius: 5, padding: '0 6px' },
+  hoyVerMas: { marginLeft: 'auto', background: 'transparent', border: 'none', color: 'var(--text-faint)', fontSize: 11.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 2 },
+  hoySectionBody: { display: 'flex', flexDirection: 'column', gap: 6 },
+  hoyRow: { display: 'flex', alignItems: 'center', gap: 11, background: 'linear-gradient(180deg, var(--panel), var(--void-2))', border: '1px solid var(--edge-soft)', borderRadius: 9, padding: '11px 14px', cursor: 'pointer' },
+  hoyDot: { width: 9, height: 9, borderRadius: '50%', flexShrink: 0 },
+  hoyCheck: { width: 15, height: 15, borderRadius: 5, border: '2px solid', flexShrink: 0 },
+  hoyRowText: { flex: 1, fontSize: 14, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  hoyRowMeta: { fontSize: 10, color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: 0.5, whiteSpace: 'nowrap' },
+
+  kanbanNota: { fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.4, marginTop: 7, padding: '7px 9px', background: 'var(--void-2)', borderRadius: 7, whiteSpace: 'pre-wrap' },
   rowLabelDone: { color: 'var(--text-dim)', textDecoration: 'line-through' },
   rowMeta: { fontSize: 10.5, color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', letterSpacing: 0.5, fontWeight: 600 },
 
