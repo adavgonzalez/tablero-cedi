@@ -1,13 +1,28 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>tablero-cedi</title>
+    <meta name="theme-color" content="#0a0a0d" />
+    <title>Tablero CEDI</title>
+    <style>
+      html,body{margin:0;height:100%;background:#0a0a0d;color:#ece7db;font-family:system-ui,sans-serif}
+      #boot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
+      #boot .dot{width:10px;height:10px;border-radius:50%;background:#ffb62e;box-shadow:0 0 12px rgba(255,182,46,.6);animation:bp 1s ease-in-out infinite}
+      #boot b{font-size:15px;letter-spacing:2px;color:#ffb62e;font-weight:700}
+      #boot small{color:#8b8676;font-size:12px;max-width:320px;line-height:1.5}
+      @keyframes bp{0%,100%{opacity:1}50%{opacity:.3}}
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot">
+        <span class="dot"></span>
+        <b>TABLERO CEDI</b>
+        <small>Iniciando el tablero… Si este mensaje no desaparece en unos segundos, avísame — significa que el navegador no pudo cargar la app.</small>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
