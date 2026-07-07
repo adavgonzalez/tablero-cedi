@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0a0a0d"/>
+  <rect x="64" y="128" width="384" height="256" rx="28" fill="#16151b" stroke="#2a2833" stroke-width="4"/>
+  <!-- split-flap tiles -->
+  <g>
+    <rect x="104" y="196" width="72" height="120" rx="10" fill="#1e1d25"/>
+    <rect x="104" y="252" width="72" height="8" fill="#050506"/>
+    <text x="140" y="290" font-family="monospace" font-size="86" font-weight="700" fill="#ffb62e" text-anchor="middle">2</text>
+
+    <rect x="220" y="196" width="72" height="120" rx="10" fill="#1e1d25"/>
+    <rect x="220" y="252" width="72" height="8" fill="#050506"/>
+    <text x="256" y="290" font-family="monospace" font-size="86" font-weight="700" fill="#ffb62e" text-anchor="middle">6</text>
+
+    <rect x="336" y="196" width="72" height="120" rx="10" fill="#1e1d25"/>
+    <rect x="336" y="252" width="72" height="8" fill="#050506"/>
+    <circle cx="372" cy="230" r="8" fill="#35d07f"/>
+    <circle cx="372" cy="282" r="8" fill="#ff5757"/>
+  </g>
+</svg>
