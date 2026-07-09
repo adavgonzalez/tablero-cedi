@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react'
 import {
   Sun, CalendarDays, LayoutGrid, Flame, Trash2, Pencil,
   Plus, Clock, CheckCircle2, Radio, ChevronRight, Circle, PenLine, Link2, Inbox,
-  ListChecks, NotebookPen, Tag, ChevronDown, StickyNote,
+  ListChecks, NotebookPen, Tag, ChevronDown, StickyNote, Timer,
 } from 'lucide-react'
 import { supabase } from './supabase'
 import SplitFlap from './SplitFlap'
@@ -11,6 +11,7 @@ import { AREAS, areaMeta } from './constants'
 const DiagramsView = lazy(() => import('./DiagramsView'))
 const InboxView = lazy(() => import('./InboxView'))
 const BitacoraView = lazy(() => import('./BitacoraView'))
+const HorasView = lazy(() => import('./HorasView'))
 
 const WEEKDAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const WEEKDAYS_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -57,6 +58,7 @@ const TABS = [
   { key: 'semanal', label: 'Semanal', Icon: CalendarDays },
   { key: 'tarea', label: 'Tareas', Icon: LayoutGrid },
   { key: 'diagramas', label: 'Diagramas', Icon: PenLine },
+  { key: 'horas', label: 'Horas extra', Icon: Timer },
   { key: 'bitacora', label: 'Bitácora', Icon: NotebookPen },
 ]
 
@@ -280,7 +282,7 @@ export default function App() {
       </nav>
 
       <main style={styles.main}>
-        {loading && tab !== 'diagramas' && tab !== 'bandeja' && tab !== 'bitacora' ? (
+        {loading && tab !== 'diagramas' && tab !== 'bandeja' && tab !== 'bitacora' && tab !== 'horas' ? (
           <div style={styles.loading}>Cargando tablero…</div>
         ) : tab === 'hoy' ? (
           <HoyView
@@ -296,6 +298,10 @@ export default function App() {
         ) : tab === 'bitacora' ? (
           <Suspense fallback={<div style={styles.loading}>Cargando bitácora…</div>}>
             <BitacoraView />
+          </Suspense>
+        ) : tab === 'horas' ? (
+          <Suspense fallback={<div style={styles.loading}>Cargando horas…</div>}>
+            <HorasView />
           </Suspense>
         ) : tab === 'diario' ? (
           <>
@@ -335,7 +341,7 @@ export default function App() {
           </Suspense>
         )}
 
-        {tab !== 'diagramas' && tab !== 'bandeja' && tab !== 'bitacora' && tab !== 'hoy' && (
+        {tab !== 'diagramas' && tab !== 'bandeja' && tab !== 'bitacora' && tab !== 'hoy' && tab !== 'horas' && (
         <form onSubmit={addItem} style={styles.addForm}>
           <input
             style={styles.input}
