@@ -143,6 +143,8 @@ input, textarea, select { font-family: inherit; }
   box-shadow: 0 0 10px var(--accent-glow); transition: left .25s cubic-bezier(.4,0,.2,1), width .25s cubic-bezier(.4,0,.2,1);
 }
 
+.boot-tabs::-webkit-scrollbar { display: none; }
+
 @media (max-width: 720px) {
   .kanban-grid { grid-template-columns: 1fr !important; }
   .diagrams-wrap { flex-direction: column !important; height: auto !important; }

@@ -253,32 +253,26 @@ export default function App() {
     <div style={{ ...styles.app, maxWidth: tab === 'diagramas' ? 1400 : 920 }}>
       <Header now={now} dailyDone={dailyDone} dailyTotal={daily.length} streak={streak} />
 
-      <nav style={styles.tabs} className="boot-tabs">
-        {TABS.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            style={{ ...styles.tabBtn, ...(tab === t.key ? styles.tabBtnActive : {}) }}
-          >
-            <t.Icon size={15} strokeWidth={2.25} style={{ marginRight: 8, verticalAlign: -3 }} />
-            {t.label}
-            {t.key === 'hoy' && (dailyPendientes + weeklyHoy + urgentesHoy) > 0 && (
-              <span style={{ ...styles.tabCount, background: 'var(--accent)', color: '#1a1200' }}>{dailyPendientes + weeklyHoy + urgentesHoy}</span>
-            )}
-            {t.key === 'bandeja' && peticionesCount > 0 && (
-              <span style={{ ...styles.tabCount, background: 'var(--late)', color: '#fff' }}>{peticionesCount}</span>
-            )}
-            {t.key === 'diario' && daily.length > 0 && (
-              <span style={{ ...styles.tabCount, ...(dailyDone === daily.length ? styles.tabCountDone : {}) }}>{dailyDone}/{daily.length}</span>
-            )}
-            {t.key === 'semanal' && weekly.length > 0 && (
-              <span style={{ ...styles.tabCount, ...(weeklyDone === weekly.length ? styles.tabCountDone : {}) }}>{weeklyDone}/{weekly.length}</span>
-            )}
-            {t.key === 'tarea' && tasks.length > 0 && (
-              <span style={styles.tabCount}>{tasks.filter(x => x.status !== 'hecho').length}</span>
-            )}
-          </button>
-        ))}
+      <nav style={styles.tabsWrap} className="boot-tabs">
+        <div style={styles.tabs}>
+          {TABS.map(t => {
+            const active = tab === t.key
+            let badge = null
+            if (t.key === 'hoy' && (dailyPendientes + weeklyHoy + urgentesHoy) > 0) badge = { n: dailyPendientes + weeklyHoy + urgentesHoy, tone: 'var(--accent)' }
+            if (t.key === 'bandeja' && peticionesCount > 0) badge = { n: peticionesCount, tone: 'var(--late)' }
+            return (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                style={{ ...styles.tabBtn, ...(active ? styles.tabBtnActive : {}) }}
+              >
+                <t.Icon size={15} strokeWidth={active ? 2.5 : 2} />
+                <span>{t.label}</span>
+                {badge && <span style={{ ...styles.tabDot, background: badge.tone }}>{badge.n}</span>}
+              </button>
+            )
+          })}
+        </div>
       </nav>
 
       <main style={styles.main}>
@@ -887,18 +881,18 @@ const styles = {
   statDivider: { width: 1, height: 34, background: 'var(--edge)' },
   streakRow: { display: 'flex', alignItems: 'center', gap: 6 },
 
-  tabs: { display: 'flex', gap: 8, marginBottom: 20, position: 'relative' },
+  tabsWrap: { marginBottom: 20, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none', borderBottom: '1px solid var(--edge-soft)' },
+  tabs: { display: 'flex', gap: 2, paddingBottom: 8, minWidth: 'min-content' },
   tabBtn: {
-    display: 'flex', alignItems: 'center', background: 'var(--panel)', border: '1px solid var(--edge-soft)',
-    color: 'var(--text-dim)', padding: '10px 16px', borderRadius: 9, fontSize: 13, fontWeight: 600,
-    letterSpacing: 0.3, transition: 'all .18s',
+    display: 'flex', alignItems: 'center', gap: 7, background: 'transparent', border: 'none',
+    color: 'var(--text-faint)', padding: '8px 13px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+    letterSpacing: 0.2, whiteSpace: 'nowrap', transition: 'color .15s, background .15s',
   },
-  tabBtnActive: {
-    background: 'linear-gradient(180deg, var(--panel-hi), var(--panel))', borderColor: 'var(--accent-deep)',
-    color: 'var(--accent)', boxShadow: '0 0 0 1px rgba(255,182,46,0.15), 0 0 18px rgba(255,182,46,0.1)',
+  tabBtnActive: { background: 'rgba(255,182,46,0.1)', color: 'var(--accent)' },
+  tabDot: {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 17, height: 17,
+    padding: '0 5px', borderRadius: 9, fontSize: 10, fontWeight: 700, color: '#1a1200', fontFamily: 'var(--font-mono)',
   },
-  tabCount: { marginLeft: 8, fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--void-2)', color: 'var(--text-dim)', borderRadius: 5, padding: '1px 6px', fontWeight: 700 },
-  tabCountDone: { background: 'rgba(53,208,127,0.15)', color: 'var(--go)' },
 
   main: { position: 'relative' },
   loading: { color: 'var(--text-dim)', padding: 40, textAlign: 'center', fontFamily: 'var(--font-mono)', letterSpacing: 1 },
