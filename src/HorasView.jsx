@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Trash2, Plus, Clock, CalendarClock, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Trash2, Plus, Clock, CalendarClock, ChevronLeft, ChevronRight, Download, FileSpreadsheet } from 'lucide-react'
 import { supabase } from './supabase'
 import { calcularHoras, TIPOS_HORA, TIPOS_EXTRA } from './horasLogic'
 import { localDateStr } from './constants'
@@ -90,6 +90,79 @@ export default function HorasView() {
 
   const totalExtra = TIPOS_EXTRA.reduce((a, tp) => a + totales[tp.key], 0)
 
+  // ---- Exportación (CSV / XLSX) ----
+  const COLS = ['Fecha', 'Día', 'Entrada', 'Salida', 'Festivo', 'Normal', 'Extra diurna', 'Extra nocturna', 'Dominical diurna', 'Dominical nocturna', 'Total extra', 'Nota']
+
+  function filasExport() {
+    const filas = registros.map(r => {
+      const d = new Date(r.fecha + 'T00:00:00')
+      const extra = TIPOS_EXTRA.reduce((a, tp) => a + Number(r[tp.key] || 0), 0)
+      return {
+        Fecha: r.fecha,
+        'Día': WEEKDAYS_SHORT[d.getDay()],
+        Entrada: r.hora_entrada?.slice(0, 5) || '',
+        Salida: r.hora_salida?.slice(0, 5) || '',
+        Festivo: r.es_festivo ? 'Sí' : 'No',
+        Normal: Number(r.h_normal || 0),
+        'Extra diurna': Number(r.h_extra_diurna || 0),
+        'Extra nocturna': Number(r.h_extra_nocturna || 0),
+        'Dominical diurna': Number(r.h_dominical_diurna || 0),
+        'Dominical nocturna': Number(r.h_dominical_nocturna || 0),
+        'Total extra': Math.round(extra * 100) / 100,
+        Nota: r.nota || '',
+      }
+    })
+    // fila de totales
+    filas.push({
+      Fecha: 'TOTAL', 'Día': '', Entrada: '', Salida: '', Festivo: '',
+      Normal: Math.round(totales.h_normal * 100) / 100,
+      'Extra diurna': Math.round(totales.h_extra_diurna * 100) / 100,
+      'Extra nocturna': Math.round(totales.h_extra_nocturna * 100) / 100,
+      'Dominical diurna': Math.round(totales.h_dominical_diurna * 100) / 100,
+      'Dominical nocturna': Math.round(totales.h_dominical_nocturna * 100) / 100,
+      'Total extra': Math.round(totalExtra * 100) / 100,
+      Nota: '',
+    })
+    return filas
+  }
+
+  function descargar(blob, nombre) {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = nombre
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  function exportarCSV() {
+    const filas = filasExport()
+    const esc = v => {
+      const s = String(v ?? '')
+      return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+    }
+    const lineas = [COLS.join(';'), ...filas.map(f => COLS.map(c => esc(f[c])).join(';'))]
+    // BOM para que Excel abra los acentos bien
+    const blob = new Blob(['\ufeff' + lineas.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
+    descargar(blob, `horas_extra_${mes}.csv`)
+  }
+
+  async function exportarXLSX() {
+    const XLSX = await import('xlsx')
+    const filas = filasExport()
+    const ws = XLSX.utils.json_to_sheet(filas, { header: COLS })
+    ws['!cols'] = [
+      { wch: 12 }, { wch: 6 }, { wch: 8 }, { wch: 8 }, { wch: 8 },
+      { wch: 8 }, { wch: 13 }, { wch: 15 }, { wch: 16 }, { wch: 18 }, { wch: 11 }, { wch: 30 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, mesLegible(mes).slice(0, 31))
+    const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+    descargar(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `horas_extra_${mes}.xlsx`)
+  }
+
   function cambiarMes(delta) {
     const [y, m] = mes.split('-').map(Number)
     const d = new Date(y, m - 1 + delta, 1)
@@ -137,11 +210,21 @@ export default function HorasView() {
         </div>
       </form>
 
-      {/* Selector de mes */}
+      {/* Selector de mes + exportar */}
       <div style={styles.monthBar}>
         <button style={styles.monthNav} onClick={() => cambiarMes(-1)}><ChevronLeft size={16} strokeWidth={2.5} /></button>
         <span style={styles.monthLabel}>{mesLegible(mes)}</span>
         <button style={styles.monthNav} onClick={() => cambiarMes(1)}><ChevronRight size={16} strokeWidth={2.5} /></button>
+        {registros.length > 0 && (
+          <div style={styles.exportGroup}>
+            <button style={styles.exportBtn} onClick={exportarXLSX} title="Descargar como Excel">
+              <FileSpreadsheet size={13} strokeWidth={2.25} /> Excel
+            </button>
+            <button style={styles.exportBtn} onClick={exportarCSV} title="Descargar como CSV">
+              <Download size={13} strokeWidth={2.25} /> CSV
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Totales del mes */}
@@ -226,9 +309,11 @@ const styles = {
   notaInput: { flex: 1, minWidth: 160, background: 'var(--void-2)', border: '1px solid var(--edge)', borderRadius: 9, padding: '10px 13px', color: 'var(--text)', fontSize: 13.5, outline: 'none' },
   addBtn: { display: 'flex', alignItems: 'center', background: 'var(--accent)', border: 'none', borderRadius: 9, padding: '10px 20px', color: '#1a1200', fontSize: 14, fontWeight: 800, boxShadow: '0 0 18px rgba(255,182,46,0.25)' },
 
-  monthBar: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 14 },
+  monthBar: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 14, flexWrap: 'wrap' },
   monthNav: { background: 'var(--panel)', border: '1px solid var(--edge)', color: 'var(--text-dim)', borderRadius: 8, padding: '6px 9px', display: 'flex' },
   monthLabel: { fontSize: 14, fontWeight: 700, color: 'var(--text)', textTransform: 'capitalize', minWidth: 160, textAlign: 'center', fontFamily: 'var(--font-mono)' },
+  exportGroup: { display: 'flex', gap: 6 },
+  exportBtn: { display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--panel)', border: '1px solid var(--edge)', color: 'var(--text-dim)', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600 },
 
   totalsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 18 },
   totalCard: { display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', background: 'linear-gradient(180deg, var(--panel), var(--void-2))', border: '1px solid', borderRadius: 11, padding: '13px 10px' },
