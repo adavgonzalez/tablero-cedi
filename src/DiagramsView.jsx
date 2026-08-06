@@ -8,7 +8,7 @@ import {
 import { supabase } from './supabase'
 
 const SAVE_DEBOUNCE_MS = 1200
-const LIB_BASE = 'https://libraries.excalidraw.com/libraries/'
+const LIB_BASE = 'https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries/'
 
 // Catálogo curado de librerías públicas de Excalidraw (MIT).
 const LIBRERIAS = [
@@ -145,6 +145,7 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
     try { return JSON.parse(localStorage.getItem('cedi_libs') || '[]') } catch { return [] }
   })
   const [cargandoLib, setCargandoLib] = useState(null)
+  const [libError, setLibError] = useState(null)
   const [activeScene, setActiveScene] = useState(null)
   const saveTimer = useRef(null)
   const apiRef = useRef(null)
@@ -251,20 +252,42 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
   async function instalarLib(lib) {
     if (!apiRef.current) return
     setCargandoLib(lib.id)
+    setLibError(null)
     try {
+      const res = await fetch(LIB_BASE + lib.src, { cache: 'force-cache' })
+      if (!res.ok) throw new Error('HTTP ' + res.status)
+      const json = await res.json()
+
+      // Formato v1 usa `library` (array de arrays de elementos);
+      // v2 usa `libraryItems` (array de objetos {id, elements}).
+      let items = []
+      if (Array.isArray(json.libraryItems) && json.libraryItems.length) {
+        items = json.libraryItems
+      } else if (Array.isArray(json.library)) {
+        items = json.library.map((elements, i) => ({
+          status: 'published',
+          id: `${lib.id}-${i}`,
+          created: Date.now(),
+          elements,
+        }))
+      }
+      if (!items.length) throw new Error('La librería llegó vacía')
+
       await apiRef.current.updateLibrary({
-        libraryItems: LIB_BASE + lib.src,
+        libraryItems: items,
         merge: true,
         prompt: false,
         openLibraryMenu: true,
         defaultStatus: 'published',
       })
+
       const next = Array.from(new Set([...instaladas, lib.id]))
       setInstaladas(next)
       localStorage.setItem('cedi_libs', JSON.stringify(next))
       setLibOpen(false)
     } catch (e) {
       console.error('Error cargando librería', e)
+      setLibError(`No se pudo cargar "${lib.nombre}". Revisa tu conexión e intenta de nuevo.`)
     } finally {
       setCargandoLib(null)
     }
@@ -272,10 +295,40 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
 
   function insertarPlantilla(pl) {
     if (!apiRef.current) return
-    const nuevos = pl.build()
     const actuales = apiRef.current.getSceneElements()
+
+    // Calcular dónde empieza el espacio libre: debajo de todo lo dibujado.
+    let offsetY = 0
+    let offsetX = 0
+    const vivos = actuales.filter(e => !e.isDeleted)
+    if (vivos.length) {
+      let maxY = -Infinity
+      let minX = Infinity
+      for (const e of vivos) {
+        const bottom = (e.y || 0) + (e.height || 0)
+        if (bottom > maxY) maxY = bottom
+        if ((e.x || 0) < minX) minX = e.x || 0
+      }
+      offsetY = maxY + 120 // margen de aire entre bloques
+      offsetX = minX
+    }
+
+    // Las plantillas se construyen con coordenadas propias; las trasladamos
+    // y les damos ids únicos para no chocar con elementos existentes.
+    const sufijo = Math.random().toString(36).slice(2, 8)
+    const base = pl.build()
+    const minTplX = Math.min(...base.map(e => e.x || 0))
+    const minTplY = Math.min(...base.map(e => e.y || 0))
+
+    const nuevos = base.map(e => ({
+      ...e,
+      id: `${e.id}-${sufijo}`,
+      x: (e.x || 0) - minTplX + offsetX,
+      y: (e.y || 0) - minTplY + offsetY,
+    }))
+
     apiRef.current.updateScene({ elements: [...actuales, ...nuevos] })
-    apiRef.current.scrollToContent(nuevos, { fitToContent: true })
+    apiRef.current.scrollToContent(nuevos, { fitToContent: true, animate: true })
   }
 
   const libsFiltradas = LIBRERIAS.filter(l => {
@@ -419,6 +472,7 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
                   <button key={t} style={{ ...styles.tagBtn, ...(libTag === t ? styles.tagBtnActive : {}) }} onClick={() => setLibTag(t)}>{t}</button>
                 ))}
               </div>
+              {libError && <div style={styles.libError}>{libError}</div>}
             </div>
 
             <div style={styles.libGrid}>
@@ -511,6 +565,7 @@ const styles = {
   tagRow: { display: 'flex', gap: 5, flexWrap: 'wrap' },
   tagBtn: { background: 'transparent', border: '1px solid var(--edge)', color: 'var(--text-faint)', borderRadius: 7, padding: '4px 10px', fontSize: 11, fontWeight: 600 },
   tagBtnActive: { borderColor: 'var(--accent-deep)', color: 'var(--accent)', background: 'rgba(255,182,46,0.08)' },
+  libError: { fontSize: 12, color: 'var(--late)', background: 'rgba(255,87,87,0.1)', border: '1px solid rgba(255,87,87,0.35)', borderRadius: 8, padding: '8px 11px', lineHeight: 1.45 },
 
   libGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 10, padding: 20, overflowY: 'auto' },
   libCard: { display: 'flex', flexDirection: 'column', gap: 6, background: 'var(--void-2)', border: '1px solid var(--edge-soft)', borderRadius: 10, padding: 12 },
