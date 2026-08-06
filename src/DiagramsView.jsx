@@ -288,23 +288,27 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
   }, [fetchLibItems])
 
   // Trae las librerías guardadas en la base de datos.
+  const instaladasRef = useRef([])
+  const [instaladasListas, setInstaladasListas] = useState(false)
   const cargarInstaladas = useCallback(async () => {
     const { data } = await supabase.from('diagram_libraries').select('lib_id, nombre, activa').order('nombre')
     const lista = data || []
+    instaladasRef.current = lista
     setInstaladas(lista)
+    setInstaladasListas(true)
     return lista
   }, [])
 
   useEffect(() => { cargarInstaladas() }, [cargarInstaladas])
 
-  // Cuando el lienzo está listo y ya sabemos qué hay instalado, restaurar.
-  const restauradoRef = useRef(false)
+  // Reaplicar las librerías activas cada vez que el lienzo se (re)monta o
+  // cambia el diagrama. Solo cuando ya sabemos qué hay guardado, para no
+  // sobrescribir el panel con una lista vacía.
   useEffect(() => {
-    if (restauradoRef.current) return
-    if (!apiRef.current || !active || activeScene === null) return
-    restauradoRef.current = true
-    aplicarLibsActivas(instaladas)
-  }, [active, activeScene, instaladas, aplicarLibsActivas])
+    if (!instaladasListas) return
+    if (!apiRef.current || !activeId) return
+    aplicarLibsActivas(instaladasRef.current)
+  }, [instaladasListas, activeId, aplicarLibsActivas])
 
   async function instalarLib(lib) {
     if (!apiRef.current) return
@@ -329,6 +333,19 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
 
   async function toggleLib(libId, activa) {
     await supabase.from('diagram_libraries').update({ activa }).eq('lib_id', libId)
+    const lista = await cargarInstaladas()
+    await aplicarLibsActivas(lista)
+  }
+
+  // Deja activa únicamente la librería indicada (o reactiva todas si ya estaba sola).
+  async function soloEsta(libId) {
+    const soloYa = instaladas.length > 1 && instaladas.every(l => (l.lib_id === libId) === l.activa)
+    if (soloYa) {
+      await supabase.from('diagram_libraries').update({ activa: true }).neq('lib_id', '')
+    } else {
+      await supabase.from('diagram_libraries').update({ activa: false }).neq('lib_id', libId)
+      await supabase.from('diagram_libraries').update({ activa: true }).eq('lib_id', libId)
+    }
     const lista = await cargarInstaladas()
     await aplicarLibsActivas(lista)
   }
@@ -465,17 +482,24 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
                     <button
                       style={{ ...styles.libToggle, ...(l.activa ? styles.libToggleOn : {}) }}
                       onClick={() => toggleLib(l.lib_id, !l.activa)}
-                      title={l.activa ? 'Ocultar del panel de librería' : 'Mostrar en el panel de librería'}
+                      title={l.activa ? 'Ocultar del panel' : 'Mostrar en el panel'}
                     >
                       {l.activa && <Check size={10} strokeWidth={3.5} />}
                     </button>
-                    <span style={{ ...styles.libRowName, opacity: l.activa ? 1 : 0.45 }}>{l.nombre}</span>
+                    <span
+                      style={{ ...styles.libRowName, opacity: l.activa ? 1 : 0.45 }}
+                      onClick={() => soloEsta(l.lib_id)}
+                      title="Clic: mostrar solo esta librería"
+                    >{l.nombre}</span>
                     <button style={styles.diagDelete} onClick={() => quitarLib(l.lib_id)} title="Quitar librería">
                       <X size={11} strokeWidth={2.5} />
                     </button>
                   </div>
                 ))}
               </div>
+              {instaladas.length > 1 && (
+                <span style={styles.libHint}>Clic en un nombre para ver solo esa librería.</span>
+              )}
             </div>
           )}
 
@@ -516,7 +540,11 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
           ) : (
             <Excalidraw
               key={active.id}
-              excalidrawAPI={api => { apiRef.current = api }}
+              excalidrawAPI={api => {
+                apiRef.current = api
+                // Al montar el lienzo, restaurar las librerías activas guardadas.
+                if (instaladasRef.current.length) aplicarLibsActivas(instaladasRef.current)
+              }}
               theme="dark"
               langCode="es-ES"
               initialData={{
@@ -635,7 +663,8 @@ const styles = {
     background: 'transparent', color: '#1a1200', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
   },
   libToggleOn: { background: 'var(--accent)', borderColor: 'var(--accent)' },
-  libRowName: { flex: 1, fontSize: 11.5, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  libRowName: { flex: 1, fontSize: 11.5, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' },
+  libHint: { fontSize: 10, color: 'var(--text-faint)', lineHeight: 1.4, marginTop: 2 },
   libBtn: {
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 'auto',
     background: 'transparent', border: '1px solid var(--accent-deep)', color: 'var(--accent)',
