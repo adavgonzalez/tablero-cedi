@@ -8,29 +8,30 @@ import {
 import { supabase } from './supabase'
 
 const SAVE_DEBOUNCE_MS = 1200
-const LIB_BASE = 'https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries/'
+const LIB_RAW = 'https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries/'
+const LIB_INDEX = 'https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries.json'
 
-// Catálogo curado de librerías públicas de Excalidraw (MIT).
-const LIBRERIAS = [
-  { id: 'flow', nombre: 'Diagramas de flujo', desc: 'Cajas de decisión sí/no, conectores', src: 'aretecode/decision-flow-control.excalidrawlib', tag: 'Procesos' },
-  { id: 'uml', nombre: 'UML y ER', desc: 'Formas para diagramas UML y entidad-relación', src: 'BjoernKW/UML-ER-library.excalidrawlib', tag: 'Procesos' },
-  { id: 'shapes', nombre: 'Formas básicas', desc: 'Figuras simples para cualquier diagrama', src: 'pgilfernandez/basic-shapes.excalidrawlib', tag: 'Básico' },
-  { id: 'iconos', nombre: 'Íconos variados', desc: 'Colección grande de íconos de uso libre', src: 'ferminrp/awesome-icons.excalidrawlib', tag: 'Íconos' },
-  { id: 'postit', nombre: 'Notas adhesivas', desc: 'Post-its de colores para lluvia de ideas', src: 'ferminrp/post-it.excalidrawlib', tag: 'Básico' },
-  { id: 'arqui', nombre: 'Arquitectura de software', desc: 'Microservicios, bases de datos, servidores', src: 'youritjang/software-architecture.excalidrawlib', tag: 'Sistemas' },
-  { id: 'tech', nombre: 'Logos de tecnología', desc: 'Logos de herramientas y plataformas', src: 'maeddes/technology-logos.excalidrawlib', tag: 'Íconos' },
-  { id: 'sistemas', nombre: 'Diseño de sistemas', desc: 'Plantilla para diagramar sistemas completos', src: 'aretecode/system-design-template.excalidrawlib', tag: 'Sistemas' },
-  { id: 'charts', nombre: 'Gráficos', desc: 'Barras, líneas, torta y columnas', src: 'g-script/charts.excalidrawlib', tag: 'Datos' },
-  { id: 'dataviz', nombre: 'Visualización de datos', desc: 'Gráficos comunes para análisis', src: 'dbssticky/data-viz.excalidrawlib', tag: 'Datos' },
-  { id: 'gantt', nombre: 'Diagrama de Gantt', desc: 'Plantilla para planear proyectos', src: 'ferminrp/gantt.excalidrawlib', tag: 'Gestión' },
-  { id: 'scrum', nombre: 'Tablero Scrum', desc: 'Tablero ágil con columnas y tarjetas', src: 'danimaniarqsoft/scrum-board.excalidrawlib', tag: 'Gestión' },
-  { id: 'infoarq', nombre: 'Arquitectura de información', desc: 'Vocabulario visual de flujos e interacción', src: 'inwardmovement/information-architecture.excalidrawlib', tag: 'Procesos' },
-  { id: 'forms', nombre: 'Formularios', desc: 'Campos, botones y componentes de formulario', src: 'g-script/forms.excalidrawlib', tag: 'Interfaz' },
-  { id: 'web', nombre: 'Componentes web', desc: 'Elementos comunes de páginas web', src: 'excacomp/web-kit.excalidrawlib', tag: 'Interfaz' },
-  { id: 'personas', nombre: 'Figuras humanas', desc: 'Monigotes para representar personas y roles', src: 'youritjang/stick-figures.excalidrawlib', tag: 'Íconos' },
+// Categorías derivadas por palabras clave del nombre/descripción de cada librería.
+const CATEGORIAS = [
+  { key: 'todas', label: 'Todas', match: () => true },
+  { key: 'flujos', label: 'Flujos y procesos', match: t => /flow|process|uml|er |diagram|decision|swimlane|bpmn|sequence|architecture|system/i.test(t) },
+  { key: 'iconos', label: 'Íconos y logos', match: t => /icon|logo|symbol|emoji|sticker|avatar/i.test(t) },
+  { key: 'datos', label: 'Datos y gráficos', match: t => /chart|graph|data|viz|plot|statistic|analytics/i.test(t) },
+  { key: 'gestion', label: 'Gestión', match: t => /gantt|scrum|kanban|board|roadmap|planning|project|canvas|retro/i.test(t) },
+  { key: 'interfaz', label: 'Interfaz', match: t => /wireframe|ui |ux|web|mobile|form|dropdown|kit|device|screen|button/i.test(t) },
+  { key: 'nube', label: 'Nube e infra', match: t => /aws|azure|gcp|cloud|kubernetes|docker|network|server|devops|database/i.test(t) },
+  { key: 'personas', label: 'Personas', match: t => /people|person|stick|figure|human|team|user|character/i.test(t) },
+  { key: 'formas', label: 'Formas básicas', match: t => /shape|basic|arrow|line|geometric|polygon|star|post-it|sticky/i.test(t) },
+  { key: 'otras', label: 'Otras', match: () => false },
 ]
 
-const TAGS = ['Todas', 'Procesos', 'Sistemas', 'Íconos', 'Datos', 'Gestión', 'Básico', 'Interfaz']
+function categoriaDe(lib) {
+  const t = `${lib.name} ${lib.description || ''}`
+  for (const c of CATEGORIAS) {
+    if (c.key !== 'todas' && c.match(t)) return c.key
+  }
+  return 'otras'
+}
 
 // Plantillas rápidas: elementos precreados que se insertan en el lienzo.
 function rect(id, x, y, w, h, text, bg = 'transparent', stroke = '#1e1e1e') {
@@ -139,11 +140,11 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
   const [fullscreen, setFullscreen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [libOpen, setLibOpen] = useState(false)
-  const [libTag, setLibTag] = useState('Todas')
+  const [libTag, setLibTag] = useState('todas')
   const [libBusca, setLibBusca] = useState('')
-  const [instaladas, setInstaladas] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('cedi_libs') || '[]') } catch { return [] }
-  })
+  const [catalogo, setCatalogo] = useState([])
+  const [catalogoCargando, setCatalogoCargando] = useState(false)
+  const [instaladas, setInstaladas] = useState([]) // [{lib_id, nombre, activa}]
   const [cargandoLib, setCargandoLib] = useState(null)
   const [libError, setLibError] = useState(null)
   const [activeScene, setActiveScene] = useState(null)
@@ -249,49 +250,111 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
   }, [activeId])
 
   // --- Librerías ---
+
+  // Descarga un .excalidrawlib y lo normaliza a libraryItems (soporta v1 y v2).
+  const fetchLibItems = useCallback(async (src, idPrefix) => {
+    const res = await fetch(LIB_RAW + src, { cache: 'force-cache' })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    const json = await res.json()
+    if (Array.isArray(json.libraryItems) && json.libraryItems.length) {
+      return json.libraryItems.map(it => ({ ...it, status: 'published' }))
+    }
+    if (Array.isArray(json.library)) {
+      return json.library.map((elements, i) => ({
+        status: 'published', id: `${idPrefix}-${i}`, created: Date.now(), elements,
+      }))
+    }
+    return []
+  }, [])
+
+  // Carga en el lienzo todas las librerías marcadas como activas.
+  const aplicarLibsActivas = useCallback(async (lista) => {
+    if (!apiRef.current) return
+    const activas = (lista || []).filter(l => l.activa)
+    let items = []
+    for (const l of activas) {
+      try {
+        const got = await fetchLibItems(l.lib_id, l.lib_id)
+        items = items.concat(got)
+      } catch (e) {
+        console.warn('No se pudo cargar librería', l.lib_id, e)
+      }
+    }
+    try {
+      await apiRef.current.updateLibrary({
+        libraryItems: items, merge: false, prompt: false, openLibraryMenu: false, defaultStatus: 'published',
+      })
+    } catch (e) { console.warn('updateLibrary falló', e) }
+  }, [fetchLibItems])
+
+  // Trae las librerías guardadas en la base de datos.
+  const cargarInstaladas = useCallback(async () => {
+    const { data } = await supabase.from('diagram_libraries').select('lib_id, nombre, activa').order('nombre')
+    const lista = data || []
+    setInstaladas(lista)
+    return lista
+  }, [])
+
+  useEffect(() => { cargarInstaladas() }, [cargarInstaladas])
+
+  // Cuando el lienzo está listo y ya sabemos qué hay instalado, restaurar.
+  const restauradoRef = useRef(false)
+  useEffect(() => {
+    if (restauradoRef.current) return
+    if (!apiRef.current || !active || activeScene === null) return
+    restauradoRef.current = true
+    aplicarLibsActivas(instaladas)
+  }, [active, activeScene, instaladas, aplicarLibsActivas])
+
   async function instalarLib(lib) {
     if (!apiRef.current) return
-    setCargandoLib(lib.id)
+    setCargandoLib(lib.source)
     setLibError(null)
     try {
-      const res = await fetch(LIB_BASE + lib.src, { cache: 'force-cache' })
-      if (!res.ok) throw new Error('HTTP ' + res.status)
-      const json = await res.json()
-
-      // Formato v1 usa `library` (array de arrays de elementos);
-      // v2 usa `libraryItems` (array de objetos {id, elements}).
-      let items = []
-      if (Array.isArray(json.libraryItems) && json.libraryItems.length) {
-        items = json.libraryItems
-      } else if (Array.isArray(json.library)) {
-        items = json.library.map((elements, i) => ({
-          status: 'published',
-          id: `${lib.id}-${i}`,
-          created: Date.now(),
-          elements,
-        }))
-      }
+      const items = await fetchLibItems(lib.source, lib.source)
       if (!items.length) throw new Error('La librería llegó vacía')
-
-      await apiRef.current.updateLibrary({
-        libraryItems: items,
-        merge: true,
-        prompt: false,
-        openLibraryMenu: true,
-        defaultStatus: 'published',
-      })
-
-      const next = Array.from(new Set([...instaladas, lib.id]))
-      setInstaladas(next)
-      localStorage.setItem('cedi_libs', JSON.stringify(next))
+      await supabase.from('diagram_libraries')
+        .upsert({ lib_id: lib.source, nombre: lib.name, activa: true }, { onConflict: 'lib_id' })
+      const lista = await cargarInstaladas()
+      await aplicarLibsActivas(lista)
+      try { apiRef.current.updateScene({ appState: { openSidebar: { name: 'library' } } }) } catch {}
       setLibOpen(false)
     } catch (e) {
       console.error('Error cargando librería', e)
-      setLibError(`No se pudo cargar "${lib.nombre}". Revisa tu conexión e intenta de nuevo.`)
+      setLibError(`No se pudo cargar "${lib.name}". Revisa tu conexión e intenta de nuevo.`)
     } finally {
       setCargandoLib(null)
     }
   }
+
+  async function toggleLib(libId, activa) {
+    await supabase.from('diagram_libraries').update({ activa }).eq('lib_id', libId)
+    const lista = await cargarInstaladas()
+    await aplicarLibsActivas(lista)
+  }
+
+  async function quitarLib(libId) {
+    await supabase.from('diagram_libraries').delete().eq('lib_id', libId)
+    const lista = await cargarInstaladas()
+    await aplicarLibsActivas(lista)
+  }
+
+  // Catálogo completo desde el repositorio oficial (231 librerías).
+  const cargarCatalogo = useCallback(async () => {
+    if (catalogo.length || catalogoCargando) return
+    setCatalogoCargando(true)
+    try {
+      const res = await fetch(LIB_INDEX, { cache: 'force-cache' })
+      const json = await res.json()
+      setCatalogo(Array.isArray(json) ? json : [])
+    } catch (e) {
+      setLibError('No se pudo cargar el catálogo de librerías.')
+    } finally {
+      setCatalogoCargando(false)
+    }
+  }, [catalogo.length, catalogoCargando])
+
+  useEffect(() => { if (libOpen) cargarCatalogo() }, [libOpen, cargarCatalogo])
 
   function insertarPlantilla(pl) {
     if (!apiRef.current) return
@@ -331,10 +394,11 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
     apiRef.current.scrollToContent(nuevos, { fitToContent: true, animate: true })
   }
 
-  const libsFiltradas = LIBRERIAS.filter(l => {
-    const okTag = libTag === 'Todas' || l.tag === libTag
+  const instaladasIds = new Set(instaladas.map(l => l.lib_id))
+  const libsFiltradas = catalogo.filter(l => {
+    const okTag = libTag === 'todas' || categoriaDe(l) === libTag
     const q = libBusca.trim().toLowerCase()
-    const okQ = !q || l.nombre.toLowerCase().includes(q) || l.desc.toLowerCase().includes(q)
+    const okQ = !q || `${l.name} ${l.description || ''}`.toLowerCase().includes(q)
     return okTag && okQ
   })
 
@@ -392,8 +456,31 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
             </div>
           </div>
 
+          {instaladas.length > 0 && (
+            <div style={styles.sideSection}>
+              <span style={styles.sideLabel}>Librerías activas</span>
+              <div style={styles.libList}>
+                {instaladas.map(l => (
+                  <div key={l.lib_id} style={styles.libRow}>
+                    <button
+                      style={{ ...styles.libToggle, ...(l.activa ? styles.libToggleOn : {}) }}
+                      onClick={() => toggleLib(l.lib_id, !l.activa)}
+                      title={l.activa ? 'Ocultar del panel de librería' : 'Mostrar en el panel de librería'}
+                    >
+                      {l.activa && <Check size={10} strokeWidth={3.5} />}
+                    </button>
+                    <span style={{ ...styles.libRowName, opacity: l.activa ? 1 : 0.45 }}>{l.nombre}</span>
+                    <button style={styles.diagDelete} onClick={() => quitarLib(l.lib_id)} title="Quitar librería">
+                      <X size={11} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button style={styles.libBtn} onClick={() => setLibOpen(true)} disabled={!active}>
-            <Library size={13} strokeWidth={2.25} /> Librerías de íconos
+            <Library size={13} strokeWidth={2.25} /> Explorar librerías
             {instaladas.length > 0 && <span style={styles.libCount}>{instaladas.length}</span>}
           </button>
         </aside>
@@ -456,8 +543,10 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
             <div style={styles.modalHead}>
               <div>
-                <div style={styles.modalTitle}>Librerías de íconos y formas</div>
-                <div style={styles.modalSub}>Al agregar una, sus elementos aparecen en el panel de librería del lienzo.</div>
+                <div style={styles.modalTitle}>Explorar librerías</div>
+                <div style={styles.modalSub}>
+                  {catalogoCargando ? 'Cargando catálogo…' : `${catalogo.length} librerías públicas disponibles. Al agregar una, sus elementos aparecen en el panel de librería del lienzo.`}
+                </div>
               </div>
               <button style={styles.modalClose} onClick={() => setLibOpen(false)}><X size={17} strokeWidth={2.25} /></button>
             </div>
@@ -465,40 +554,40 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
             <div style={styles.modalTools}>
               <div style={styles.searchWrap}>
                 <Search size={13} color="var(--text-faint)" strokeWidth={2.25} />
-                <input style={styles.searchInput} placeholder="Buscar librería…" value={libBusca} onChange={e => setLibBusca(e.target.value)} />
+                <input style={styles.searchInput} placeholder="Buscar entre todas las librerías…" value={libBusca} onChange={e => setLibBusca(e.target.value)} />
               </div>
               <div style={styles.tagRow}>
-                {TAGS.map(t => (
-                  <button key={t} style={{ ...styles.tagBtn, ...(libTag === t ? styles.tagBtnActive : {}) }} onClick={() => setLibTag(t)}>{t}</button>
+                {CATEGORIAS.map(c => (
+                  <button key={c.key} style={{ ...styles.tagBtn, ...(libTag === c.key ? styles.tagBtnActive : {}) }} onClick={() => setLibTag(c.key)}>{c.label}</button>
                 ))}
               </div>
               {libError && <div style={styles.libError}>{libError}</div>}
             </div>
 
             <div style={styles.libGrid}>
+              {catalogoCargando && <div style={styles.emptySide}>Cargando catálogo…</div>}
               {libsFiltradas.map(l => {
-                const yaEsta = instaladas.includes(l.id)
-                const cargando = cargandoLib === l.id
+                const yaEsta = instaladasIds.has(l.source)
+                const cargando = cargandoLib === l.source
                 return (
-                  <div key={l.id} style={styles.libCard}>
+                  <div key={l.source} style={styles.libCard}>
                     <div style={styles.libCardTop}>
-                      <span style={styles.libNombre}>{l.nombre}</span>
-                      <span style={styles.libTag}>{l.tag}</span>
+                      <span style={styles.libNombre}>{l.name}</span>
                     </div>
-                    <p style={styles.libDesc}>{l.desc}</p>
+                    <p style={styles.libDesc}>{(l.description || '').slice(0, 110)}</p>
                     <button
                       style={{ ...styles.libAdd, ...(yaEsta ? styles.libAddDone : {}) }}
                       onClick={() => instalarLib(l)}
                       disabled={cargando}
                     >
                       {cargando ? <><Loader2 size={12} strokeWidth={2.5} className="spin" /> Cargando…</>
-                        : yaEsta ? <><Check size={12} strokeWidth={3} /> Agregada · volver a cargar</>
+                        : yaEsta ? <><Check size={12} strokeWidth={3} /> Ya agregada</>
                         : <><Download size={12} strokeWidth={2.5} /> Agregar</>}
                     </button>
                   </div>
                 )
               })}
-              {libsFiltradas.length === 0 && <div style={styles.emptySide}>Sin resultados.</div>}
+              {!catalogoCargando && libsFiltradas.length === 0 && <div style={styles.emptySide}>Sin resultados.</div>}
             </div>
           </div>
         </div>
@@ -539,6 +628,14 @@ const styles = {
     display: 'flex', alignItems: 'center', gap: 6, background: 'var(--panel)', border: '1px solid var(--edge-soft)',
     color: 'var(--text-dim)', borderRadius: 8, padding: '7px 10px', fontSize: 11.5, fontWeight: 600, textAlign: 'left',
   },
+  libList: { display: 'flex', flexDirection: 'column', gap: 4 },
+  libRow: { display: 'flex', alignItems: 'center', gap: 7, padding: '5px 8px', background: 'var(--panel)', border: '1px solid var(--edge-soft)', borderRadius: 7 },
+  libToggle: {
+    width: 15, height: 15, flexShrink: 0, borderRadius: 4, border: '1px solid var(--edge)',
+    background: 'transparent', color: '#1a1200', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+  },
+  libToggleOn: { background: 'var(--accent)', borderColor: 'var(--accent)' },
+  libRowName: { flex: 1, fontSize: 11.5, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   libBtn: {
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 'auto',
     background: 'transparent', border: '1px solid var(--accent-deep)', color: 'var(--accent)',
