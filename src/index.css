@@ -143,6 +143,9 @@ input, textarea, select { font-family: inherit; }
   box-shadow: 0 0 10px var(--accent-glow); transition: left .25s cubic-bezier(.4,0,.2,1), width .25s cubic-bezier(.4,0,.2,1);
 }
 
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.9s linear infinite; }
+
 .boot-tabs::-webkit-scrollbar { display: none; }
 
 @media (max-width: 720px) {
