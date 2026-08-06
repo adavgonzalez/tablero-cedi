@@ -451,11 +451,7 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
           ) : (
             <Excalidraw
               key={active.id}
-              excalidrawAPI={api => {
-                apiRef.current = api
-                // Al montar el lienzo, restaurar las librerías activas guardadas.
-                if (instaladasRef.current.length) aplicarLibsActivas(instaladasRef.current)
-              }}
+              excalidrawAPI={api => { apiRef.current = api }}
               theme="dark"
               langCode="es-ES"
               initialData={{
