@@ -1,7 +1,7 @@
 {
-  "name": "Tablero CEDI",
-  "short_name": "Tablero CEDI",
-  "description": "Tablero de despacho — informes, tareas, peticiones y bitácora del CEDI Madrid",
+  "name": "Tablero Personal",
+  "short_name": "Tablero Personal",
+  "description": "Informes, tareas, peticiones, horas extra y bitácora personal",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait-primary",

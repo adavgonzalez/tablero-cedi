@@ -96,7 +96,7 @@ export default function App() {
         { id: 'd1', name: 'Inventario cíclico EWM', category: 'diario', position: 1, target_time: '08:00', status: 'backlog', diagram_id: 'g1' },
         { id: 'd2', name: 'MB52 stock valorizado', category: 'diario', position: 2, target_time: '10:30', status: 'backlog' },
         { id: 'd3', name: 'Avance de picking paqueteo', category: 'diario', position: 3, target_time: '14:00', status: 'backlog' },
-        { id: 'w1', name: 'Ocupación CEDI semanal', category: 'semanal', position: 1, target_weekday: 5, status: 'backlog' },
+        { id: 'w1', name: 'Ocupación semanal', category: 'semanal', position: 1, target_weekday: 5, status: 'backlog' },
         { id: 'w2', name: 'Indicadores modulación', category: 'semanal', position: 2, target_weekday: 2, status: 'backlog' },
         { id: 't1', name: 'Refactor M_Plan_ERP', category: 'tarea', position: 1, status: 'en_progreso', diagram_id: 'g1' },
         { id: 't2', name: 'Documentar flujo VT11→VL06F', category: 'tarea', position: 2, status: 'backlog' },
@@ -388,10 +388,10 @@ function Header({ now, dailyDone, dailyTotal, streak }) {
           <div style={styles.liveRow}>
             <span className="led-live flicker" style={{ ...styles.led, width: 9, height: 9, background: 'var(--online)', '--gc': 'var(--go-glow)' }} />
             <span style={styles.liveText}>OPERANDO EN LÍNEA</span>
-            <span style={styles.destChip}>CEDI MADRID</span>
+            <span style={styles.destChip}>PERSONAL</span>
           </div>
-          <h1 style={styles.title} className="board-title">TABLERO&nbsp;DE&nbsp;DESPACHO</h1>
-          <p style={styles.subtitle}>Operaciones · Paqueteo · {dayName} {dateStr}</p>
+          <h1 style={styles.title} className="board-title">TABLERO&nbsp;PERSONAL</h1>
+          <p style={styles.subtitle}>{dayName} {dateStr}</p>
         </div>
 
         <div style={styles.headerRight} className="header-right">

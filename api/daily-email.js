@@ -69,7 +69,7 @@ export default async function handler(req, res) {
   <div style="background:#08090c;padding:32px 16px;font-family:Arial,sans-serif;">
     <div style="max-width:520px;margin:0 auto;background:#14171f;border:1px solid #2e3544;border-radius:14px;overflow:hidden;">
       <div style="padding:22px 24px;border-bottom:1px solid #2e3544;">
-        <div style="color:#3ee08a;font-family:'Courier New',monospace;font-size:11px;letter-spacing:2px;font-weight:700;">TABLERO CEDI</div>
+        <div style="color:#3ee08a;font-family:'Courier New',monospace;font-size:11px;letter-spacing:2px;font-weight:700;">TABLERO PERSONAL</div>
         <div style="color:#eef1f6;font-size:20px;font-weight:800;margin-top:4px;text-transform:capitalize;">${dateLabel}</div>
       </div>
       <div style="padding:8px 0 0;">
@@ -92,7 +92,7 @@ export default async function handler(req, res) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'Tablero CEDI <onboarding@resend.dev>',
+      from: 'Tablero Personal <onboarding@resend.dev>',
       to: [process.env.NOTIFY_EMAIL],
       subject: `Informes de hoy — ${dateLabel}`,
       html,
