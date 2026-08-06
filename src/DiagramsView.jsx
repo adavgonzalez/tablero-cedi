@@ -282,7 +282,7 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
       await supabase.from('diagram_libraries')
         .upsert({ lib_id: lib.source, nombre: lib.name, activa: true }, { onConflict: 'lib_id' })
       await cargarInstaladas()
-      setLibOpen(false)
+      // El modal se mantiene abierto para poder agregar varias seguidas.
       setPanelOpen(true)
     } catch (e) {
       console.error('Error cargando librería', e)
@@ -489,7 +489,9 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
               <div>
                 <div style={styles.modalTitle}>Explorar librerías</div>
                 <div style={styles.modalSub}>
-                  {catalogoCargando ? 'Cargando catálogo…' : `${catalogo.length} librerías públicas disponibles. Al agregar una, sus elementos aparecen en el panel de librería del lienzo.`}
+                  {catalogoCargando
+                    ? 'Cargando catálogo…'
+                    : `${catalogo.length} librerías públicas disponibles.${instaladas.length ? ` Tienes ${instaladas.length} agregada${instaladas.length > 1 ? 's' : ''}.` : ''} Agrega las que quieras y cierra cuando termines.`}
                 </div>
               </div>
               <button style={styles.modalClose} onClick={() => setLibOpen(false)}><X size={17} strokeWidth={2.25} /></button>
