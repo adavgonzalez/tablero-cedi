@@ -6,6 +6,7 @@ import {
   Download, Search, Sparkles, PanelLeftClose, PanelLeft, Loader2,
 } from 'lucide-react'
 import { supabase } from './supabase'
+import LibraryPanel from './LibraryPanel'
 
 const SAVE_DEBOUNCE_MS = 1200
 const LIB_RAW = 'https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries/'
@@ -147,6 +148,7 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
   const [instaladas, setInstaladas] = useState([]) // [{lib_id, nombre, activa}]
   const [cargandoLib, setCargandoLib] = useState(null)
   const [libError, setLibError] = useState(null)
+  const [panelOpen, setPanelOpen] = useState(true)
   const [activeScene, setActiveScene] = useState(null)
   const saveTimer = useRef(null)
   const apiRef = useRef(null)
@@ -250,44 +252,9 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
   }, [activeId])
 
   // --- Librerías ---
+  // Las librerías se muestran en nuestro panel propio (LibraryPanel), que las
+  // agrupa en secciones desplegables. Aquí solo gestionamos qué hay guardado.
 
-  // Descarga un .excalidrawlib y lo normaliza a libraryItems (soporta v1 y v2).
-  const fetchLibItems = useCallback(async (src, idPrefix) => {
-    const res = await fetch(LIB_RAW + src, { cache: 'force-cache' })
-    if (!res.ok) throw new Error('HTTP ' + res.status)
-    const json = await res.json()
-    if (Array.isArray(json.libraryItems) && json.libraryItems.length) {
-      return json.libraryItems.map(it => ({ ...it, status: 'published' }))
-    }
-    if (Array.isArray(json.library)) {
-      return json.library.map((elements, i) => ({
-        status: 'published', id: `${idPrefix}-${i}`, created: Date.now(), elements,
-      }))
-    }
-    return []
-  }, [])
-
-  // Carga en el lienzo todas las librerías marcadas como activas.
-  const aplicarLibsActivas = useCallback(async (lista) => {
-    if (!apiRef.current) return
-    const activas = (lista || []).filter(l => l.activa)
-    let items = []
-    for (const l of activas) {
-      try {
-        const got = await fetchLibItems(l.lib_id, l.lib_id)
-        items = items.concat(got)
-      } catch (e) {
-        console.warn('No se pudo cargar librería', l.lib_id, e)
-      }
-    }
-    try {
-      await apiRef.current.updateLibrary({
-        libraryItems: items, merge: false, prompt: false, openLibraryMenu: false, defaultStatus: 'published',
-      })
-    } catch (e) { console.warn('updateLibrary falló', e) }
-  }, [fetchLibItems])
-
-  // Trae las librerías guardadas en la base de datos.
   const instaladasRef = useRef([])
   const [instaladasListas, setInstaladasListas] = useState(false)
   const cargarInstaladas = useCallback(async () => {
@@ -301,28 +268,22 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
 
   useEffect(() => { cargarInstaladas() }, [cargarInstaladas])
 
-  // Reaplicar las librerías activas cada vez que el lienzo se (re)monta o
-  // cambia el diagrama. Solo cuando ya sabemos qué hay guardado, para no
-  // sobrescribir el panel con una lista vacía.
-  useEffect(() => {
-    if (!instaladasListas) return
-    if (!apiRef.current || !activeId) return
-    aplicarLibsActivas(instaladasRef.current)
-  }, [instaladasListas, activeId, aplicarLibsActivas])
-
   async function instalarLib(lib) {
-    if (!apiRef.current) return
     setCargandoLib(lib.source)
     setLibError(null)
     try {
-      const items = await fetchLibItems(lib.source, lib.source)
-      if (!items.length) throw new Error('La librería llegó vacía')
+      // Verificar que la librería se pueda descargar antes de guardarla.
+      const res = await fetch(LIB_RAW + lib.source, { cache: 'force-cache' })
+      if (!res.ok) throw new Error('HTTP ' + res.status)
+      const json = await res.json()
+      const n = (json.libraryItems?.length) || (json.library?.length) || 0
+      if (!n) throw new Error('La librería llegó vacía')
+
       await supabase.from('diagram_libraries')
         .upsert({ lib_id: lib.source, nombre: lib.name, activa: true }, { onConflict: 'lib_id' })
-      const lista = await cargarInstaladas()
-      await aplicarLibsActivas(lista)
-      try { apiRef.current.updateScene({ appState: { openSidebar: { name: 'library' } } }) } catch {}
+      await cargarInstaladas()
       setLibOpen(false)
+      setPanelOpen(true)
     } catch (e) {
       console.error('Error cargando librería', e)
       setLibError(`No se pudo cargar "${lib.name}". Revisa tu conexión e intenta de nuevo.`)
@@ -331,29 +292,9 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
     }
   }
 
-  async function toggleLib(libId, activa) {
-    await supabase.from('diagram_libraries').update({ activa }).eq('lib_id', libId)
-    const lista = await cargarInstaladas()
-    await aplicarLibsActivas(lista)
-  }
-
-  // Deja activa únicamente la librería indicada (o reactiva todas si ya estaba sola).
-  async function soloEsta(libId) {
-    const soloYa = instaladas.length > 1 && instaladas.every(l => (l.lib_id === libId) === l.activa)
-    if (soloYa) {
-      await supabase.from('diagram_libraries').update({ activa: true }).neq('lib_id', '')
-    } else {
-      await supabase.from('diagram_libraries').update({ activa: false }).neq('lib_id', libId)
-      await supabase.from('diagram_libraries').update({ activa: true }).eq('lib_id', libId)
-    }
-    const lista = await cargarInstaladas()
-    await aplicarLibsActivas(lista)
-  }
-
   async function quitarLib(libId) {
     await supabase.from('diagram_libraries').delete().eq('lib_id', libId)
-    const lista = await cargarInstaladas()
-    await aplicarLibsActivas(lista)
+    await cargarInstaladas()
   }
 
   // Catálogo completo desde el repositorio oficial (231 librerías).
@@ -473,36 +414,6 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
             </div>
           </div>
 
-          {instaladas.length > 0 && (
-            <div style={styles.sideSection}>
-              <span style={styles.sideLabel}>Librerías activas</span>
-              <div style={styles.libList}>
-                {instaladas.map(l => (
-                  <div key={l.lib_id} style={styles.libRow}>
-                    <button
-                      style={{ ...styles.libToggle, ...(l.activa ? styles.libToggleOn : {}) }}
-                      onClick={() => toggleLib(l.lib_id, !l.activa)}
-                      title={l.activa ? 'Ocultar del panel' : 'Mostrar en el panel'}
-                    >
-                      {l.activa && <Check size={10} strokeWidth={3.5} />}
-                    </button>
-                    <span
-                      style={{ ...styles.libRowName, opacity: l.activa ? 1 : 0.45 }}
-                      onClick={() => soloEsta(l.lib_id)}
-                      title="Clic: mostrar solo esta librería"
-                    >{l.nombre}</span>
-                    <button style={styles.diagDelete} onClick={() => quitarLib(l.lib_id)} title="Quitar librería">
-                      <X size={11} strokeWidth={2.5} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-              {instaladas.length > 1 && (
-                <span style={styles.libHint}>Clic en un nombre para ver solo esa librería.</span>
-              )}
-            </div>
-          )}
-
           <button style={styles.libBtn} onClick={() => setLibOpen(true)} disabled={!active}>
             <Library size={13} strokeWidth={2.25} /> Explorar librerías
             {instaladas.length > 0 && <span style={styles.libCount}>{instaladas.length}</span>}
@@ -516,7 +427,7 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
             {sidebarOpen ? <PanelLeftClose size={14} strokeWidth={2} /> : <PanelLeft size={14} strokeWidth={2} />}
           </button>
           <span style={styles.barTitle}>{active?.name || 'Sin diagrama'}</span>
-          <button style={styles.barBtn} onClick={() => setLibOpen(true)} disabled={!active} title="Librerías">
+          <button style={{ ...styles.barBtn, ...(panelOpen ? styles.barBtnOn : {}) }} onClick={() => setPanelOpen(p => !p)} disabled={!active} title="Panel de íconos">
             <Library size={14} strokeWidth={2} />
           </button>
           <button style={styles.barBtn} onClick={() => setFullscreen(f => !f)} title={fullscreen ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'}>
@@ -565,6 +476,15 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
         </div>
       </div>
 
+      {panelOpen && active && (
+        <LibraryPanel
+          librerias={instaladas}
+          apiRef={apiRef}
+          onClose={() => setPanelOpen(false)}
+          onExplorar={() => setLibOpen(true)}
+        />
+      )}
+
       {/* Modal de librerías */}
       {libOpen && (
         <div style={styles.modalOverlay} onClick={() => setLibOpen(false)}>
@@ -605,11 +525,11 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
                     <p style={styles.libDesc}>{(l.description || '').slice(0, 110)}</p>
                     <button
                       style={{ ...styles.libAdd, ...(yaEsta ? styles.libAddDone : {}) }}
-                      onClick={() => instalarLib(l)}
+                      onClick={() => (yaEsta ? quitarLib(l.source) : instalarLib(l))}
                       disabled={cargando}
                     >
                       {cargando ? <><Loader2 size={12} strokeWidth={2.5} className="spin" /> Cargando…</>
-                        : yaEsta ? <><Check size={12} strokeWidth={3} /> Ya agregada</>
+                        : yaEsta ? <><Check size={12} strokeWidth={3} /> Agregada · quitar</>
                         : <><Download size={12} strokeWidth={2.5} /> Agregar</>}
                     </button>
                   </div>
@@ -676,6 +596,7 @@ const styles = {
   canvasBar: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--panel)', borderBottom: '1px solid var(--edge)' },
   barTitle: { flex: 1, fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   barBtn: { background: 'transparent', border: '1px solid var(--edge)', color: 'var(--text-dim)', borderRadius: 7, padding: '5px 7px', display: 'flex' },
+  barBtnOn: { borderColor: 'var(--accent-deep)', color: 'var(--accent)', background: 'rgba(255,182,46,0.08)' },
   canvasInner: { flex: 1, background: '#121212', minHeight: 0 },
   canvasEmpty: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-faint)', fontSize: 13.5, textAlign: 'center', padding: 20 },
 
