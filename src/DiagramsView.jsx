@@ -186,6 +186,18 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
   }, [fullscreen])
 
+  // Excalidraw cachea el tamaño de su lienzo: al cambiar el contenedor
+  // (pantalla completa, paneles) hay que pedirle que se recalcule.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        window.dispatchEvent(new Event('resize'))
+        apiRef.current?.refresh?.()
+      } catch { /* noop */ }
+    }, 60)
+    return () => clearTimeout(t)
+  }, [fullscreen, sidebarOpen, panelOpen])
+
   const active = diagrams.find(d => d.id === activeId) || (activeId ? { id: activeId, name: '' } : null)
 
   async function createDiagram(nombre = null, elements = null) {
@@ -427,7 +439,7 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
             {sidebarOpen ? <PanelLeftClose size={14} strokeWidth={2} /> : <PanelLeft size={14} strokeWidth={2} />}
           </button>
           <span style={styles.barTitle}>{active?.name || 'Sin diagrama'}</span>
-          <button style={{ ...styles.barBtn, ...(panelOpen ? styles.barBtnOn : {}) }} onClick={() => setPanelOpen(p => !p)} disabled={!active} title="Panel de íconos">
+          <button style={{ ...styles.barBtn, ...(panelOpen ? styles.barBtnOn : {}) }} onClick={() => setPanelOpen(p => !p)} title="Panel de íconos">
             <Library size={14} strokeWidth={2} />
           </button>
           <button style={styles.barBtn} onClick={() => setFullscreen(f => !f)} title={fullscreen ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'}>
@@ -472,7 +484,7 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
         </div>
       </div>
 
-      {panelOpen && active && (
+      {panelOpen && (
         <LibraryPanel
           librerias={instaladas}
           apiRef={apiRef}
@@ -545,10 +557,10 @@ export default function DiagramsView({ focusId, onFocusConsumed }) {
 }
 
 const styles = {
-  wrap: { display: 'flex', gap: 12, height: '74vh', minHeight: 500, position: 'relative' },
+  wrap: { display: 'flex', gap: 12, height: '74vh', minHeight: 500, position: 'relative', alignItems: 'stretch' },
   wrapFull: {
     display: 'flex', gap: 12, position: 'fixed', inset: 0, zIndex: 9999,
-    background: 'var(--void)', padding: 12,
+    background: 'var(--void)', padding: 12, alignItems: 'stretch',
   },
 
   sidebar: { width: 210, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' },
