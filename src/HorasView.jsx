@@ -45,12 +45,19 @@ export default function HorasView() {
       return
     }
     setLoading(true)
-    const { data } = await supabase
+    // Límite superior EXCLUSIVO (primer día del mes siguiente). Usar '-31' fijo
+    // rompía la consulta en meses de 28/29/30 días (fecha inválida => error de Postgres).
+    const [y, m] = mes.split('-').map(Number)
+    const finExclusivo = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
+    const { data, error } = await supabase
       .from('horas_extra')
       .select('*')
       .gte('fecha', mes + '-01')
-      .lte('fecha', mes + '-31')
+      .lt('fecha', finExclusivo)
       .order('fecha', { ascending: true })
+    if (error) {
+      setFeedback({ tipo: 'error', msg: `No se pudieron cargar los registros: ${error.message}` })
+    }
     setRegistros(data || [])
     setLoading(false)
   }, [mes])
