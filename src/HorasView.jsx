@@ -30,6 +30,8 @@ export default function HorasView() {
   const [salida, setSalida] = useState('16:00')
   const [esFestivo, setEsFestivo] = useState(false)
   const [nota, setNota] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const [feedback, setFeedback] = useState(null) // { tipo: 'ok' | 'error', msg: string }
 
   const load = useCallback(async () => {
     if (typeof window !== 'undefined' && window.location.search.includes('demo')) {
@@ -61,17 +63,31 @@ export default function HorasView() {
     return () => supabase.removeChannel(ch)
   }, [load])
 
+  useEffect(() => {
+    if (!feedback) return
+    const t = setTimeout(() => setFeedback(null), 3500)
+    return () => clearTimeout(t)
+  }, [feedback])
+
   // Vista previa en vivo del cálculo mientras llena el formulario
   const preview = useMemo(() => calcularHoras(fecha, entrada, salida, esFestivo), [fecha, entrada, salida, esFestivo])
   const previewTotal = Object.values(preview).reduce((a, b) => a + b, 0)
 
   async function agregar(e) {
     e.preventDefault()
-    if (!fecha || !entrada || !salida) return
+    if (!fecha || !entrada || !salida || guardando) return
+    setGuardando(true)
+    setFeedback(null)
     const h = calcularHoras(fecha, entrada, salida, esFestivo)
-    await supabase.from('horas_extra').insert({
+    const { error } = await supabase.from('horas_extra').insert({
       fecha, hora_entrada: entrada, hora_salida: salida, es_festivo: esFestivo, nota: nota.trim() || null, ...h,
     })
+    setGuardando(false)
+    if (error) {
+      setFeedback({ tipo: 'error', msg: `No se pudo guardar: ${error.message}` })
+      return
+    }
+    setFeedback({ tipo: 'ok', msg: 'Jornada registrada.' })
     setNota('')
     if (fecha.slice(0, 7) !== mes) setMes(fecha.slice(0, 7))
     load()
@@ -206,8 +222,17 @@ export default function HorasView() {
 
         <div style={styles.formRow2}>
           <input style={styles.notaInput} placeholder="Nota (opcional)…" value={nota} onChange={e => setNota(e.target.value)} />
-          <button type="submit" style={styles.addBtn}><Plus size={15} strokeWidth={2.5} style={{ verticalAlign: -2, marginRight: 4 }} />Registrar</button>
+          <button type="submit" disabled={guardando} style={{ ...styles.addBtn, opacity: guardando ? 0.6 : 1, cursor: guardando ? 'default' : 'pointer' }}>
+            <Plus size={15} strokeWidth={2.5} style={{ verticalAlign: -2, marginRight: 4 }} />
+            {guardando ? 'Guardando…' : 'Registrar'}
+          </button>
         </div>
+
+        {feedback && (
+          <div style={feedback.tipo === 'ok' ? styles.feedbackOk : styles.feedbackError}>
+            {feedback.msg}
+          </div>
+        )}
       </form>
 
       {/* Selector de mes + exportar */}
@@ -308,6 +333,8 @@ const styles = {
   formRow2: { display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' },
   notaInput: { flex: 1, minWidth: 160, background: 'var(--void-2)', border: '1px solid var(--edge)', borderRadius: 9, padding: '10px 13px', color: 'var(--text)', fontSize: 13.5, outline: 'none' },
   addBtn: { display: 'flex', alignItems: 'center', background: 'var(--accent)', border: 'none', borderRadius: 9, padding: '10px 20px', color: '#1a1200', fontSize: 14, fontWeight: 800, boxShadow: '0 0 18px rgba(255,182,46,0.25)' },
+  feedbackOk: { marginTop: 10, padding: '8px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: 'rgba(52, 211, 153, 0.12)', color: '#34d399', border: '1px solid rgba(52, 211, 153, 0.3)' },
+  feedbackError: { marginTop: 10, padding: '8px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: 'rgba(255, 87, 87, 0.12)', color: '#ff5757', border: '1px solid rgba(255, 87, 87, 0.3)' },
 
   monthBar: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 14, flexWrap: 'wrap' },
   monthNav: { background: 'var(--panel)', border: '1px solid var(--edge)', color: 'var(--text-dim)', borderRadius: 8, padding: '6px 9px', display: 'flex' },
